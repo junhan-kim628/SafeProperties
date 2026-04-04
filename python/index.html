@@ -100,11 +100,19 @@
                     <tr><th>역세권 여부</th><td id="feat-station">-</td></tr>
                     <tr><th>건물 노후도</th><td id="feat-age">0년</td></tr>
                 </table>
+
+                <strong style="display:block; margin-top:20px;">🏢 건물 상세 정보</strong>
+                <table class="feature-table">
+                    <tr><th>전용 면적</th><td id="feat-area">-</td></tr>
+                    <tr><th>해당 층</th><td id="feat-floor">-</td></tr>
+                    <tr><th>총 거래 건수</th><td id="feat-tx">-</td></tr>
+                    <tr><th>지하철역까지 거리</th><td id="feat-dist">-</td></tr>
+                </table>
             </div>
         </div>
     </div>
 
-    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=d3c98c42c61ab1339ddf01ae0d0427fd&autoload=false"></script>
+    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=d3c98c42c61ab1339ddf01ae0d0427fd&libraries=services&autoload=false"></script>
 
     <script>
         const API_BASE_URL = "http://127.0.0.1:8000";
@@ -117,7 +125,6 @@
                 level: 7
             };
             map = new kakao.maps.Map(mapContainer, mapOption);
-
             loadMarkers();
         }
 
@@ -130,25 +137,14 @@
                     data.data.forEach(house => {
                         var markerPosition = new kakao.maps.LatLng(house.lat, house.lon);
 
-                        // 🌟 위험도(risk)에 따라 마커 색상 이미지 변경
-                        let iconUrl = "https://maps.google.com/mapfiles/ms/icons/green-dot.png"; // 0: 적정 (초록)
-                        if(house.risk === 1) iconUrl = "https://maps.google.com/mapfiles/ms/icons/orange-dot.png"; // 1: 주의 (주황)
-                        if(house.risk === 2) iconUrl = "https://maps.google.com/mapfiles/ms/icons/red-dot.png"; // 2: 위험 (빨강)
+                        let iconUrl = "https://maps.google.com/mapfiles/ms/icons/green-dot.png"; // 초록
+                        if(house.risk === 1) iconUrl = "https://maps.google.com/mapfiles/ms/icons/orange-dot.png"; // 주황
+                        if(house.risk === 2) iconUrl = "https://maps.google.com/mapfiles/ms/icons/red-dot.png"; // 빨강
 
-                        // 카카오 지도에 커스텀 마커 이미지 적용
                         var markerImage = new kakao.maps.MarkerImage(iconUrl, new kakao.maps.Size(32, 32));
-
-                        var marker = new kakao.maps.Marker({
-                            position: markerPosition,
-                            image: markerImage, // 지정한 색상 이미지 넣기
-                            clickable: true
-                        });
-
+                        var marker = new kakao.maps.Marker({ position: markerPosition, image: markerImage, clickable: true });
                         marker.setMap(map);
-
-                        kakao.maps.event.addListener(marker, 'click', function() {
-                            openPanel(house);
-                        });
+                        kakao.maps.event.addListener(marker, 'click', function() { openPanel(house); });
                     });
 
                     if(data.data.length > 0) {
@@ -171,13 +167,30 @@
             try {
                 const response = await fetch(`${API_BASE_URL}/api/predict/${house.house_id}`);
                 const data = await response.json();
-                if(data.status === "success") renderReport(data);
+
+                if(data.status === "success") {
+                    // 🌟 수정 2: 카카오 로컬 API로 집 주변 가장 가까운 지하철역(카테고리: SW8) 실시간 검색
+                    var ps = new kakao.maps.services.Places();
+                    ps.categorySearch('SW8', function(places, status) {
+                        let stationName = "";
+                        // 역을 성공적으로 찾았다면 가장 가까운 역의 이름을 가져옵니다.
+                        if (status === kakao.maps.services.Status.OK && places.length > 0) {
+                            stationName = places[0].place_name;
+                        }
+                        // AI 데이터와 찾은 역 이름을 함께 화면에 그려줍니다.
+                        renderReport(data, stationName);
+                    }, {
+                        location: new kakao.maps.LatLng(house.lat, house.lon),
+                        sort: kakao.maps.services.SortBy.DISTANCE, // 거리순 정렬
+                        radius: 2000 // 반경 2km 이내 검색
+                    });
+                }
             } catch (error) {
                 console.error("예측 에러:", error);
             }
         }
 
-        function renderReport(data) {
+        function renderReport(data, stationName) {
             document.getElementById('loading').style.display = 'none';
             document.getElementById('report-content').style.display = 'block';
 
@@ -197,22 +210,19 @@
 
             const f = data.details;
 
+            // 아까 수정한 예쁜 금액 표기 함수 유지!
             const formatMoney = (num) => {
                 if (!num || num === 0) return "0원";
-                let isNegative = num < 0; // 마이너스 갭 금액 대응
+                let isNegative = num < 0;
                 let absNum = Math.abs(num);
-                let manWon = Math.round(absNum / 10000); // 1만 원 단위로 변환
-
+                let manWon = Math.round(absNum / 10000);
                 if (manWon === 0) return "0원";
-
-                let uk = Math.floor(manWon / 10000); // 억 단위
-                let man = manWon % 10000;            // 만 단위
-
+                let uk = Math.floor(manWon / 10000);
+                let man = manWon % 10000;
                 let result = "";
                 if (uk > 0) result += uk.toLocaleString() + "억 ";
                 if (man > 0) result += man.toLocaleString() + "만 ";
                 result += "원";
-
                 return (isNegative ? "-" : "") + result.trim();
             };
 
@@ -220,13 +230,39 @@
             document.getElementById('feat-sale').innerText = formatMoney(f.avg_sale_price);
             document.getElementById('feat-gap').innerText = formatMoney(f.gap_amount);
             document.getElementById('feat-dev').innerText = f.jeonse_rate_deviation > 0 ? `평균보다 +${f.jeonse_rate_deviation.toFixed(1)}% 높음` : `평균보다 ${f.jeonse_rate_deviation.toFixed(1)}% 낮음`;
-            document.getElementById('feat-station').innerText = f.is_station_area === 1 ? "도보 500m 이내" : "비역세권";
+
+            // 🌟 수정 3: 찾아온 역 이름을 바탕으로 화면에 예쁘게 표기
+            let stationText = f.is_station_area === 1 ? "역세권" : "비역세권";
+            if (stationName) {
+                if (f.is_station_area === 1) {
+                    stationText = `역세권 (${stationName})`; // 예: 역세권 (강남역)
+                } else {
+                    stationText = `비역세권 (인근: ${stationName})`; // 예: 비역세권 (인근: 역삼역)
+                }
+            }
+            document.getElementById('feat-station').innerText = stationText;
+
             document.getElementById('feat-age').innerText = `${f.build_age}년 차`;
+
+            // 🌟 새롭게 추가하는 건물 상세 정보 데이터 연결! 👇
+            // 면적은 보기 좋게 소수점 둘째 자리까지만 표기 (㎡ 와 평수 동시 표기)
+            if(f.exclusive_area) {
+                let pyeong = (f.exclusive_area / 3.3058).toFixed(1);
+                document.getElementById('feat-area').innerText = `${f.exclusive_area.toFixed(2)}㎡ (약 ${pyeong}평)`;
+            }
+
+            // 층수는 보기 좋게 정수로 반올림
+            document.getElementById('feat-floor').innerText = f.floor ? `${Math.round(f.floor)}층` : "-";
+
+            // 거래 건수
+            document.getElementById('feat-tx').innerText = f.total_tx_count ? `${f.total_tx_count.toLocaleString()}건` : "-";
+
+            // 지하철역까지의 정확한 거리 (m)
+            document.getElementById('feat-dist').innerText = f.dist_to_subway ? `${Math.round(f.dist_to_subway)}m` : "-";
         }
 
         function closePanel() { document.getElementById('side-panel').classList.remove('open'); }
 
-        // 🌟 수정된 실행 방식: 카카오 스크립트가 완전히 준비된 후 지도를 그립니다.
         window.onload = function() {
             kakao.maps.load(function() {
                 initMap();
