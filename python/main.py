@@ -41,10 +41,10 @@ def serve_frontend():
 
 
 # ==========================================
-# 📍 기존 API 1: 마커 가져오기
+# 📍 수정된 API 1: 마커 가져오기 (색상 분리를 위한 위험도 추가)
 # ==========================================
 @app.get("/api/markers")
-def get_map_markers(limit: int = 1000):
+def get_map_markers(limit: int = 500):
     try:
         conn = psycopg2.connect(**DB_PARAMS)
         cursor = conn.cursor()
@@ -53,7 +53,31 @@ def get_map_markers(limit: int = 1000):
         rows = cursor.fetchall()
         conn.close()
 
-        markers = [{"house_id": r[0], "building_name": r[1], "address": r[2], "lon": r[3], "lat": r[4]} for r in rows]
+        # 마커 색상을 칠하기 위해 전체 위험도를 계산합니다.
+        df = pd.read_csv("ml_training_data.csv")
+        features = ['building_type_code', 'build_age', 'exclusive_area', 'floor', 'dist_to_subway', 'is_station_area',
+                    'avg_sale_price', 'avg_jeonse_deposit', 'gap_amount', 'total_tx_count', 'group_avg_jeonse_rate',
+                    'jeonse_rate_deviation']
+
+        markers = []
+        for r in rows:
+            h_id = r[0]
+            # 클릭 시와 똑같은 기준으로 데이터 매칭
+            row_index = h_id % len(df)
+            X_input = df.iloc[[row_index]][features]
+
+            # 위험도 예측 (0: 적정, 1: 주의, 2: 위험)
+            pred = int(model.predict(X_input)[0])
+
+            markers.append({
+                "house_id": h_id,
+                "building_name": r[1],
+                "address": r[2],
+                "lon": r[3],
+                "lat": r[4],
+                "risk": pred  # 🌟 프론트엔드로 위험도 번호(0, 1, 2) 전달!
+            })
+
         return {"status": "success", "data": markers}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -129,9 +129,26 @@
                 if(data.status === "success") {
                     data.data.forEach(house => {
                         var markerPosition = new kakao.maps.LatLng(house.lat, house.lon);
-                        var marker = new kakao.maps.Marker({ position: markerPosition, clickable: true });
+
+                        // 🌟 위험도(risk)에 따라 마커 색상 이미지 변경
+                        let iconUrl = "https://maps.google.com/mapfiles/ms/icons/green-dot.png"; // 0: 적정 (초록)
+                        if(house.risk === 1) iconUrl = "https://maps.google.com/mapfiles/ms/icons/orange-dot.png"; // 1: 주의 (주황)
+                        if(house.risk === 2) iconUrl = "https://maps.google.com/mapfiles/ms/icons/red-dot.png"; // 2: 위험 (빨강)
+
+                        // 카카오 지도에 커스텀 마커 이미지 적용
+                        var markerImage = new kakao.maps.MarkerImage(iconUrl, new kakao.maps.Size(32, 32));
+
+                        var marker = new kakao.maps.Marker({
+                            position: markerPosition,
+                            image: markerImage, // 지정한 색상 이미지 넣기
+                            clickable: true
+                        });
+
                         marker.setMap(map);
-                        kakao.maps.event.addListener(marker, 'click', function() { openPanel(house); });
+
+                        kakao.maps.event.addListener(marker, 'click', function() {
+                            openPanel(house);
+                        });
                     });
 
                     if(data.data.length > 0) {
@@ -179,7 +196,25 @@
             document.getElementById('bar-2').style.width = data.probability['위험'] + '%';
 
             const f = data.details;
-            const formatMoney = (num) => Math.round(num / 10000).toLocaleString() + "만 원";
+
+            const formatMoney = (num) => {
+                if (!num || num === 0) return "0원";
+                let isNegative = num < 0; // 마이너스 갭 금액 대응
+                let absNum = Math.abs(num);
+                let manWon = Math.round(absNum / 10000); // 1만 원 단위로 변환
+
+                if (manWon === 0) return "0원";
+
+                let uk = Math.floor(manWon / 10000); // 억 단위
+                let man = manWon % 10000;            // 만 단위
+
+                let result = "";
+                if (uk > 0) result += uk.toLocaleString() + "억 ";
+                if (man > 0) result += man.toLocaleString() + "만 ";
+                result += "원";
+
+                return (isNegative ? "-" : "") + result.trim();
+            };
 
             document.getElementById('feat-jeonse').innerText = formatMoney(f.avg_jeonse_deposit);
             document.getElementById('feat-sale').innerText = formatMoney(f.avg_sale_price);
