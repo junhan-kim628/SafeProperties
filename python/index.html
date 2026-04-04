@@ -6,49 +6,31 @@
     <title>AI 전세 사기 예측 대시보드</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; overflow: hidden; }
-
-        /* 지도 영역 */
         #map { width: 100%; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
-
-        /* 상단 헤더 타이틀 */
         .header { position: absolute; top: 20px; left: 20px; z-index: 2; background: white; padding: 15px 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
         .header h1 { margin: 0; font-size: 20px; color: #333; }
         .header p { margin: 5px 0 0 0; font-size: 13px; color: #666; }
-
-        /* 우측 정보 패널 (AI 리포트) */
-        #side-panel {
-            position: absolute; top: 0; right: -400px; width: 360px; height: 100vh;
-            background: white; z-index: 3; box-shadow: -4px 0 15px rgba(0,0,0,0.1);
-            transition: right 0.3s ease-in-out; overflow-y: auto;
-        }
+        #side-panel { position: absolute; top: 0; right: -400px; width: 360px; height: 100vh; background: white; z-index: 3; box-shadow: -4px 0 15px rgba(0,0,0,0.1); transition: right 0.3s ease-in-out; overflow-y: auto; }
         #side-panel.open { right: 0; }
         .panel-header { background: #2c3e50; color: white; padding: 20px; position: relative; }
         .panel-header h2 { margin: 0; font-size: 22px; }
         .panel-header p { margin: 5px 0 0 0; font-size: 14px; opacity: 0.8; }
         .close-btn { position: absolute; top: 15px; right: 20px; color: white; font-size: 24px; cursor: pointer; background: none; border: none; }
-
         .panel-content { padding: 20px; }
-
-        /* 위험도 뱃지 디자인 */
         .risk-badge { display: inline-block; padding: 8px 16px; border-radius: 20px; font-weight: bold; font-size: 16px; margin-bottom: 20px; color: white;}
-        .risk-0 { background-color: #27ae60; } /* 적정 - 초록 */
-        .risk-1 { background-color: #f39c12; } /* 주의 - 주황 */
-        .risk-2 { background-color: #e74c3c; } /* 위험 - 빨강 */
-
-        /* AI 확률 바 */
+        .risk-0 { background-color: #27ae60; }
+        .risk-1 { background-color: #f39c12; }
+        .risk-2 { background-color: #e74c3c; }
         .prob-box { margin-bottom: 20px; background: #f8f9fa; padding: 15px; border-radius: 8px; }
         .prob-item { margin-bottom: 10px; }
         .prob-item:last-child { margin-bottom: 0; }
         .prob-label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 5px; font-weight: bold; }
         .prob-bar-bg { width: 100%; height: 8px; background: #ddd; border-radius: 4px; overflow: hidden; }
         .prob-bar { height: 100%; border-radius: 4px; }
-
-        /* 세부 지표 표 */
         .feature-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
         .feature-table th, .feature-table td { padding: 10px; border-bottom: 1px solid #eee; text-align: left; }
         .feature-table th { color: #666; font-weight: normal; width: 40%; }
         .feature-table td { font-weight: bold; color: #333; }
-
         #loading { display: none; text-align: center; padding: 50px 0; font-weight: bold; color: #3498db; }
     </style>
 </head>
@@ -69,28 +51,14 @@
         </div>
         <div class="panel-content">
             <div id="loading">AI가 위험도를 분석 중입니다... 🤖</div>
-
             <div id="report-content" style="display: none;">
-                <div style="text-align: center;">
-                    <div id="risk-badge" class="risk-badge">위험도 판별 결과</div>
-                </div>
-
+                <div style="text-align: center;"><div id="risk-badge" class="risk-badge">위험도 판별 결과</div></div>
                 <div class="prob-box">
                     <strong>🤖 AI 예측 확률</strong>
-                    <div class="prob-item" style="margin-top:10px;">
-                        <div class="prob-label"><span>위험 (사기 의심)</span><span id="prob-2">0%</span></div>
-                        <div class="prob-bar-bg"><div class="prob-bar" style="width: 0%; background: #e74c3c;" id="bar-2"></div></div>
-                    </div>
-                    <div class="prob-item">
-                        <div class="prob-label"><span>주의 (신중 검토)</span><span id="prob-1">0%</span></div>
-                        <div class="prob-bar-bg"><div class="prob-bar" style="width: 0%; background: #f39c12;" id="bar-1"></div></div>
-                    </div>
-                    <div class="prob-item">
-                        <div class="prob-label"><span>적정 (안전 범위)</span><span id="prob-0">0%</span></div>
-                        <div class="prob-bar-bg"><div class="prob-bar" style="width: 0%; background: #27ae60;" id="bar-0"></div></div>
-                    </div>
+                    <div class="prob-item" style="margin-top:10px;"><div class="prob-label"><span>위험 (사기 의심)</span><span id="prob-2">0%</span></div><div class="prob-bar-bg"><div class="prob-bar" style="width: 0%; background: #e74c3c;" id="bar-2"></div></div></div>
+                    <div class="prob-item"><div class="prob-label"><span>주의 (신중 검토)</span><span id="prob-1">0%</span></div><div class="prob-bar-bg"><div class="prob-bar" style="width: 0%; background: #f39c12;" id="bar-1"></div></div></div>
+                    <div class="prob-item"><div class="prob-label"><span>적정 (안전 범위)</span><span id="prob-0">0%</span></div><div class="prob-bar-bg"><div class="prob-bar" style="width: 0%; background: #27ae60;" id="bar-0"></div></div></div>
                 </div>
-
                 <strong>📊 핵심 지표 분석</strong>
                 <table class="feature-table">
                     <tr><th>평균 전세가</th><td id="feat-jeonse">0원</td></tr>
@@ -100,7 +68,6 @@
                     <tr><th>역세권 여부</th><td id="feat-station">-</td></tr>
                     <tr><th>건물 노후도</th><td id="feat-age">0년</td></tr>
                 </table>
-
                 <strong style="display:block; margin-top:20px;">🏢 건물 상세 정보</strong>
                 <table class="feature-table">
                     <tr><th>전용 면적</th><td id="feat-area">-</td></tr>
@@ -112,11 +79,12 @@
         </div>
     </div>
 
-    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=d3c98c42c61ab1339ddf01ae0d0427fd&libraries=services&autoload=false"></script>
+    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=d3c98c42c61ab1339ddf01ae0d0427fd&libraries=services,clusterer&autoload=false"></script>
 
     <script>
         const API_BASE_URL = "http://127.0.0.1:8000";
         let map;
+        let clusterer;
 
         function initMap() {
             var mapContainer = document.getElementById('map');
@@ -125,6 +93,14 @@
                 level: 7
             };
             map = new kakao.maps.Map(mapContainer, mapOption);
+
+            // 클러스터러 무조건 뭉치도록 레벨 5로 세팅
+            clusterer = new kakao.maps.MarkerClusterer({
+                map: map,
+                averageCenter: true,
+                minLevel: 5
+            });
+
             loadMarkers();
         }
 
@@ -134,18 +110,31 @@
                 const data = await response.json();
 
                 if(data.status === "success") {
+                    let markers = []; // 마커를 담을 빈 상자
+
                     data.data.forEach(house => {
                         var markerPosition = new kakao.maps.LatLng(house.lat, house.lon);
 
-                        let iconUrl = "https://maps.google.com/mapfiles/ms/icons/green-dot.png"; // 초록
-                        if(house.risk === 1) iconUrl = "https://maps.google.com/mapfiles/ms/icons/orange-dot.png"; // 주황
-                        if(house.risk === 2) iconUrl = "https://maps.google.com/mapfiles/ms/icons/red-dot.png"; // 빨강
+                        let iconUrl = "https://maps.google.com/mapfiles/ms/icons/green-dot.png";
+                        if(house.risk === 1) iconUrl = "https://maps.google.com/mapfiles/ms/icons/orange-dot.png";
+                        if(house.risk === 2) iconUrl = "https://maps.google.com/mapfiles/ms/icons/red-dot.png";
 
                         var markerImage = new kakao.maps.MarkerImage(iconUrl, new kakao.maps.Size(32, 32));
-                        var marker = new kakao.maps.Marker({ position: markerPosition, image: markerImage, clickable: true });
-                        marker.setMap(map);
+
+                        var marker = new kakao.maps.Marker({
+                            position: markerPosition,
+                            image: markerImage,
+                            clickable: true
+                        });
+
                         kakao.maps.event.addListener(marker, 'click', function() { openPanel(house); });
+
+                        // 🚨 중요: marker.setMap(map); 을 절대 쓰지 않고 상자에만 담습니다!
+                        markers.push(marker);
                     });
+
+                    // 상자에 모은 마커를 클러스터러에 한방에 밀어넣기
+                    clusterer.addMarkers(markers);
 
                     if(data.data.length > 0) {
                         map.setCenter(new kakao.maps.LatLng(data.data[0].lat, data.data[0].lon));
@@ -160,7 +149,6 @@
             document.getElementById('side-panel').classList.add('open');
             document.getElementById('bldg-name').innerText = house.building_name || "이름 없는 주택";
             document.getElementById('bldg-addr').innerText = house.address;
-
             document.getElementById('loading').style.display = 'block';
             document.getElementById('report-content').style.display = 'none';
 
@@ -169,25 +157,20 @@
                 const data = await response.json();
 
                 if(data.status === "success") {
-                    // 🌟 수정 2: 카카오 로컬 API로 집 주변 가장 가까운 지하철역(카테고리: SW8) 실시간 검색
                     var ps = new kakao.maps.services.Places();
                     ps.categorySearch('SW8', function(places, status) {
                         let stationName = "";
-                        // 역을 성공적으로 찾았다면 가장 가까운 역의 이름을 가져옵니다.
                         if (status === kakao.maps.services.Status.OK && places.length > 0) {
                             stationName = places[0].place_name;
                         }
-                        // AI 데이터와 찾은 역 이름을 함께 화면에 그려줍니다.
                         renderReport(data, stationName);
                     }, {
                         location: new kakao.maps.LatLng(house.lat, house.lon),
-                        sort: kakao.maps.services.SortBy.DISTANCE, // 거리순 정렬
-                        radius: 2000 // 반경 2km 이내 검색
+                        sort: kakao.maps.services.SortBy.DISTANCE,
+                        radius: 2000
                     });
                 }
-            } catch (error) {
-                console.error("예측 에러:", error);
-            }
+            } catch (error) { console.error("예측 에러:", error); }
         }
 
         function renderReport(data, stationName) {
@@ -209,8 +192,6 @@
             document.getElementById('bar-2').style.width = data.probability['위험'] + '%';
 
             const f = data.details;
-
-            // 아까 수정한 예쁜 금액 표기 함수 유지!
             const formatMoney = (num) => {
                 if (!num || num === 0) return "0원";
                 let isNegative = num < 0;
@@ -231,42 +212,24 @@
             document.getElementById('feat-gap').innerText = formatMoney(f.gap_amount);
             document.getElementById('feat-dev').innerText = f.jeonse_rate_deviation > 0 ? `평균보다 +${f.jeonse_rate_deviation.toFixed(1)}% 높음` : `평균보다 ${f.jeonse_rate_deviation.toFixed(1)}% 낮음`;
 
-            // 🌟 수정 3: 찾아온 역 이름을 바탕으로 화면에 예쁘게 표기
             let stationText = f.is_station_area === 1 ? "역세권" : "비역세권";
-            if (stationName) {
-                if (f.is_station_area === 1) {
-                    stationText = `역세권 (${stationName})`; // 예: 역세권 (강남역)
-                } else {
-                    stationText = `비역세권 (인근: ${stationName})`; // 예: 비역세권 (인근: 역삼역)
-                }
-            }
+            if (stationName) stationText += (f.is_station_area === 1 ? ` (${stationName})` : ` (인근: ${stationName})`);
             document.getElementById('feat-station').innerText = stationText;
-
             document.getElementById('feat-age').innerText = `${f.build_age}년 차`;
 
-            // 🌟 새롭게 추가하는 건물 상세 정보 데이터 연결! 👇
-            // 면적은 보기 좋게 소수점 둘째 자리까지만 표기 (㎡ 와 평수 동시 표기)
             if(f.exclusive_area) {
                 let pyeong = (f.exclusive_area / 3.3058).toFixed(1);
                 document.getElementById('feat-area').innerText = `${f.exclusive_area.toFixed(2)}㎡ (약 ${pyeong}평)`;
             }
-
-            // 층수는 보기 좋게 정수로 반올림
             document.getElementById('feat-floor').innerText = f.floor ? `${Math.round(f.floor)}층` : "-";
-
-            // 거래 건수
             document.getElementById('feat-tx').innerText = f.total_tx_count ? `${f.total_tx_count.toLocaleString()}건` : "-";
-
-            // 지하철역까지의 정확한 거리 (m)
             document.getElementById('feat-dist').innerText = f.dist_to_subway ? `${Math.round(f.dist_to_subway)}m` : "-";
         }
 
         function closePanel() { document.getElementById('side-panel').classList.remove('open'); }
 
         window.onload = function() {
-            kakao.maps.load(function() {
-                initMap();
-            });
+            kakao.maps.load(function() { initMap(); });
         };
     </script>
 </body>
