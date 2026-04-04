@@ -7,9 +7,17 @@
     <style>
         body, html { margin: 0; padding: 0; height: 100%; font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; overflow: hidden; }
         #map { width: 100%; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
+
         .header { position: absolute; top: 20px; left: 20px; z-index: 2; background: white; padding: 15px 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
         .header h1 { margin: 0; font-size: 20px; color: #333; }
         .header p { margin: 5px 0 0 0; font-size: 13px; color: #666; }
+
+        /* 🌟 새롭게 추가된 필터 버튼 디자인 */
+        .filter-box { position: absolute; top: 95px; left: 20px; z-index: 2; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: flex; gap: 8px; }
+        .filter-btn { padding: 8px 12px; border: 1px solid #ddd; background: white; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; transition: all 0.2s; }
+        .filter-btn:hover { background: #f1f2f6; }
+        .filter-btn.active { border-color: #3498db; background: #ebf5fb; color: #2980b9; }
+
         #side-panel { position: absolute; top: 0; right: -400px; width: 360px; height: 100vh; background: white; z-index: 3; box-shadow: -4px 0 15px rgba(0,0,0,0.1); transition: right 0.3s ease-in-out; overflow-y: auto; }
         #side-panel.open { right: 0; }
         .panel-header { background: #2c3e50; color: white; padding: 20px; position: relative; }
@@ -39,6 +47,13 @@
     <div class="header">
         <h1>🔍 AI 전세 사기 예측 대시보드</h1>
         <p>지도에서 주택 마커를 클릭하여 위험도를 분석하세요.</p>
+    </div>
+
+    <div class="filter-box">
+        <button class="filter-btn active" onclick="filterMarkers('all', this)">전체 보기</button>
+        <button class="filter-btn" onclick="filterMarkers(0, this)">✅ 적정 매물</button>
+        <button class="filter-btn" onclick="filterMarkers(1, this)">⚠️ 주의 매물</button>
+        <button class="filter-btn" onclick="filterMarkers(2, this)">🚨 위험 매물</button>
     </div>
 
     <div id="map"></div>
@@ -85,22 +100,14 @@
         const API_BASE_URL = "http://127.0.0.1:8000";
         let map;
         let clusterer;
+        let allMarkers = []; // 🌟 전체 마커를 기억해둘 저장소
 
         function initMap() {
             var mapContainer = document.getElementById('map');
-            var mapOption = {
-                center: new kakao.maps.LatLng(37.566826, 126.9786567),
-                level: 7
-            };
+            var mapOption = { center: new kakao.maps.LatLng(37.566826, 126.9786567), level: 7 };
             map = new kakao.maps.Map(mapContainer, mapOption);
 
-            // 클러스터러 무조건 뭉치도록 레벨 5로 세팅
-            clusterer = new kakao.maps.MarkerClusterer({
-                map: map,
-                averageCenter: true,
-                minLevel: 5
-            });
-
+            clusterer = new kakao.maps.MarkerClusterer({ map: map, averageCenter: true, minLevel: 5 });
             loadMarkers();
         }
 
@@ -110,9 +117,7 @@
                 const data = await response.json();
 
                 if(data.status === "success") {
-                    let markers = []; // 마커를 담을 빈 상자
-
-                    data.data.forEach(house => {
+                    allMarkers = data.data.map(house => {
                         var markerPosition = new kakao.maps.LatLng(house.lat, house.lon);
 
                         let iconUrl = "https://maps.google.com/mapfiles/ms/icons/green-dot.png";
@@ -121,27 +126,35 @@
 
                         var markerImage = new kakao.maps.MarkerImage(iconUrl, new kakao.maps.Size(32, 32));
 
-                        var marker = new kakao.maps.Marker({
-                            position: markerPosition,
-                            image: markerImage,
-                            clickable: true
-                        });
+                        var marker = new kakao.maps.Marker({ position: markerPosition, image: markerImage, clickable: true });
+                        marker.risk = house.risk; // 🌟 마커 객체에 위험도 이름표 붙이기 (나중에 걸러내기 위함)
 
                         kakao.maps.event.addListener(marker, 'click', function() { openPanel(house); });
-
-                        // 🚨 중요: marker.setMap(map); 을 절대 쓰지 않고 상자에만 담습니다!
-                        markers.push(marker);
+                        return marker;
                     });
 
-                    // 상자에 모은 마커를 클러스터러에 한방에 밀어넣기
-                    clusterer.addMarkers(markers);
+                    clusterer.addMarkers(allMarkers); // 지도에 전체 마커 뿌리기
 
-                    if(data.data.length > 0) {
-                        map.setCenter(new kakao.maps.LatLng(data.data[0].lat, data.data[0].lon));
-                    }
+                    if(data.data.length > 0) map.setCenter(new kakao.maps.LatLng(data.data[0].lat, data.data[0].lon));
                 }
-            } catch (error) {
-                console.error("마커 로드 에러:", error);
+            } catch (error) { console.error("마커 로드 에러:", error); }
+        }
+
+        // 🌟 새롭게 추가된 마커 필터링 함수
+        function filterMarkers(riskLevel, btnElement) {
+            // 버튼 색상 변경 (눌린 버튼만 파란색으로)
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+            btnElement.classList.add('active');
+
+            // 지도에서 클러스터러 초기화(싹 지우기)
+            clusterer.clear();
+
+            // 조건에 맞는 마커만 골라서 클러스터러에 다시 넣기
+            if (riskLevel === 'all') {
+                clusterer.addMarkers(allMarkers);
+            } else {
+                let filtered = allMarkers.filter(m => m.risk === riskLevel);
+                clusterer.addMarkers(filtered);
             }
         }
 
@@ -155,20 +168,13 @@
             try {
                 const response = await fetch(`${API_BASE_URL}/api/predict/${house.house_id}`);
                 const data = await response.json();
-
                 if(data.status === "success") {
                     var ps = new kakao.maps.services.Places();
                     ps.categorySearch('SW8', function(places, status) {
                         let stationName = "";
-                        if (status === kakao.maps.services.Status.OK && places.length > 0) {
-                            stationName = places[0].place_name;
-                        }
+                        if (status === kakao.maps.services.Status.OK && places.length > 0) stationName = places[0].place_name;
                         renderReport(data, stationName);
-                    }, {
-                        location: new kakao.maps.LatLng(house.lat, house.lon),
-                        sort: kakao.maps.services.SortBy.DISTANCE,
-                        radius: 2000
-                    });
+                    }, { location: new kakao.maps.LatLng(house.lat, house.lon), sort: kakao.maps.services.SortBy.DISTANCE, radius: 2000 });
                 }
             } catch (error) { console.error("예측 에러:", error); }
         }
@@ -228,9 +234,7 @@
 
         function closePanel() { document.getElementById('side-panel').classList.remove('open'); }
 
-        window.onload = function() {
-            kakao.maps.load(function() { initMap(); });
-        };
+        window.onload = function() { kakao.maps.load(function() { initMap(); }); };
     </script>
 </body>
 </html>
