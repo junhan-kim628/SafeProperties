@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 전세 사기 예측 대시보드</title>
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; overflow: hidden; }
+
+        /* 지도 영역 */
+        #map { width: 100%; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
+
+        /* 상단 헤더 타이틀 */
+        .header { position: absolute; top: 20px; left: 20px; z-index: 2; background: white; padding: 15px 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .header h1 { margin: 0; font-size: 20px; color: #333; }
+        .header p { margin: 5px 0 0 0; font-size: 13px; color: #666; }
+
+        /* 우측 정보 패널 (AI 리포트) */
+        #side-panel {
+            position: absolute; top: 0; right: -400px; width: 360px; height: 100vh;
+            background: white; z-index: 3; box-shadow: -4px 0 15px rgba(0,0,0,0.1);
+            transition: right 0.3s ease-in-out; overflow-y: auto;
+        }
+        #side-panel.open { right: 0; }
+        .panel-header { background: #2c3e50; color: white; padding: 20px; position: relative; }
+        .panel-header h2 { margin: 0; font-size: 22px; }
+        .panel-header p { margin: 5px 0 0 0; font-size: 14px; opacity: 0.8; }
+        .close-btn { position: absolute; top: 15px; right: 20px; color: white; font-size: 24px; cursor: pointer; background: none; border: none; }
+
+        .panel-content { padding: 20px; }
+
+        /* 위험도 뱃지 디자인 */
+        .risk-badge { display: inline-block; padding: 8px 16px; border-radius: 20px; font-weight: bold; font-size: 16px; margin-bottom: 20px; color: white;}
+        .risk-0 { background-color: #27ae60; } /* 적정 - 초록 */
+        .risk-1 { background-color: #f39c12; } /* 주의 - 주황 */
+        .risk-2 { background-color: #e74c3c; } /* 위험 - 빨강 */
+
+        /* AI 확률 바 */
+        .prob-box { margin-bottom: 20px; background: #f8f9fa; padding: 15px; border-radius: 8px; }
+        .prob-item { margin-bottom: 10px; }
+        .prob-item:last-child { margin-bottom: 0; }
+        .prob-label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 5px; font-weight: bold; }
+        .prob-bar-bg { width: 100%; height: 8px; background: #ddd; border-radius: 4px; overflow: hidden; }
+        .prob-bar { height: 100%; border-radius: 4px; }
+
+        /* 세부 지표 표 */
+        .feature-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+        .feature-table th, .feature-table td { padding: 10px; border-bottom: 1px solid #eee; text-align: left; }
+        .feature-table th { color: #666; font-weight: normal; width: 40%; }
+        .feature-table td { font-weight: bold; color: #333; }
+
+        #loading { display: none; text-align: center; padding: 50px 0; font-weight: bold; color: #3498db; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>🔍 AI 전세 사기 예측 대시보드</h1>
+        <p>지도에서 주택 마커를 클릭하여 위험도를 분석하세요.</p>
+    </div>
+
+    <div id="map"></div>
+
+    <div id="side-panel">
+        <div class="panel-header">
+            <button class="close-btn" onclick="closePanel()">×</button>
+            <h2 id="bldg-name">건물명</h2>
+            <p id="bldg-addr">주소</p>
+        </div>
+        <div class="panel-content">
+            <div id="loading">AI가 위험도를 분석 중입니다... 🤖</div>
+
+            <div id="report-content" style="display: none;">
+                <div style="text-align: center;">
+                    <div id="risk-badge" class="risk-badge">위험도 판별 결과</div>
+                </div>
+
+                <div class="prob-box">
+                    <strong>🤖 AI 예측 확률</strong>
+                    <div class="prob-item" style="margin-top:10px;">
+                        <div class="prob-label"><span>위험 (사기 의심)</span><span id="prob-2">0%</span></div>
+                        <div class="prob-bar-bg"><div class="prob-bar" style="width: 0%; background: #e74c3c;" id="bar-2"></div></div>
+                    </div>
+                    <div class="prob-item">
+                        <div class="prob-label"><span>주의 (신중 검토)</span><span id="prob-1">0%</span></div>
+                        <div class="prob-bar-bg"><div class="prob-bar" style="width: 0%; background: #f39c12;" id="bar-1"></div></div>
+                    </div>
+                    <div class="prob-item">
+                        <div class="prob-label"><span>적정 (안전 범위)</span><span id="prob-0">0%</span></div>
+                        <div class="prob-bar-bg"><div class="prob-bar" style="width: 0%; background: #27ae60;" id="bar-0"></div></div>
+                    </div>
+                </div>
+
+                <strong>📊 핵심 지표 분석</strong>
+                <table class="feature-table">
+                    <tr><th>평균 전세가</th><td id="feat-jeonse">0원</td></tr>
+                    <tr><th>평균 매매가</th><td id="feat-sale">0원</td></tr>
+                    <tr><th>무자본 갭 금액</th><td id="feat-gap" style="color:#e74c3c;">0원</td></tr>
+                    <tr><th>유사 매물 대비 편차</th><td id="feat-dev">0%</td></tr>
+                    <tr><th>역세권 여부</th><td id="feat-station">-</td></tr>
+                    <tr><th>건물 노후도</th><td id="feat-age">0년</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=d3c98c42c61ab1339ddf01ae0d0427fd&autoload=false"></script>
+
+    <script>
+        const API_BASE_URL = "http://127.0.0.1:8000";
+        let map;
+
+        function initMap() {
+            var mapContainer = document.getElementById('map');
+            var mapOption = {
+                center: new kakao.maps.LatLng(37.566826, 126.9786567),
+                level: 7
+            };
+            map = new kakao.maps.Map(mapContainer, mapOption);
+
+            loadMarkers();
+        }
+
+        async function loadMarkers() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/markers?limit=500`);
+                const data = await response.json();
+
+                if(data.status === "success") {
+                    data.data.forEach(house => {
+                        var markerPosition = new kakao.maps.LatLng(house.lat, house.lon);
+                        var marker = new kakao.maps.Marker({ position: markerPosition, clickable: true });
+                        marker.setMap(map);
+                        kakao.maps.event.addListener(marker, 'click', function() { openPanel(house); });
+                    });
+
+                    if(data.data.length > 0) {
+                        map.setCenter(new kakao.maps.LatLng(data.data[0].lat, data.data[0].lon));
+                    }
+                }
+            } catch (error) {
+                console.error("마커 로드 에러:", error);
+            }
+        }
+
+        async function openPanel(house) {
+            document.getElementById('side-panel').classList.add('open');
+            document.getElementById('bldg-name').innerText = house.building_name || "이름 없는 주택";
+            document.getElementById('bldg-addr').innerText = house.address;
+
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('report-content').style.display = 'none';
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/predict/${house.house_id}`);
+                const data = await response.json();
+                if(data.status === "success") renderReport(data);
+            } catch (error) {
+                console.error("예측 에러:", error);
+            }
+        }
+
+        function renderReport(data) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('report-content').style.display = 'block';
+
+            const badge = document.getElementById('risk-badge');
+            badge.innerText = `AI 판별: ${data.prediction}`;
+            badge.className = 'risk-badge';
+            if(data.prediction === "적정") badge.classList.add('risk-0');
+            else if(data.prediction === "주의") badge.classList.add('risk-1');
+            else badge.classList.add('risk-2');
+
+            document.getElementById('prob-0').innerText = data.probability['적정'] + '%';
+            document.getElementById('bar-0').style.width = data.probability['적정'] + '%';
+            document.getElementById('prob-1').innerText = data.probability['주의'] + '%';
+            document.getElementById('bar-1').style.width = data.probability['주의'] + '%';
+            document.getElementById('prob-2').innerText = data.probability['위험'] + '%';
+            document.getElementById('bar-2').style.width = data.probability['위험'] + '%';
+
+            const f = data.details;
+            const formatMoney = (num) => Math.round(num / 10000).toLocaleString() + "만 원";
+
+            document.getElementById('feat-jeonse').innerText = formatMoney(f.avg_jeonse_deposit);
+            document.getElementById('feat-sale').innerText = formatMoney(f.avg_sale_price);
+            document.getElementById('feat-gap').innerText = formatMoney(f.gap_amount);
+            document.getElementById('feat-dev').innerText = f.jeonse_rate_deviation > 0 ? `평균보다 +${f.jeonse_rate_deviation.toFixed(1)}% 높음` : `평균보다 ${f.jeonse_rate_deviation.toFixed(1)}% 낮음`;
+            document.getElementById('feat-station').innerText = f.is_station_area === 1 ? "도보 500m 이내" : "비역세권";
+            document.getElementById('feat-age').innerText = `${f.build_age}년 차`;
+        }
+
+        function closePanel() { document.getElementById('side-panel').classList.remove('open'); }
+
+        // 🌟 수정된 실행 방식: 카카오 스크립트가 완전히 준비된 후 지도를 그립니다.
+        window.onload = function() {
+            kakao.maps.load(function() {
+                initMap();
+            });
+        };
+    </script>
+</body>
+</html>
