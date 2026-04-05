@@ -130,3 +130,43 @@ def predict_risk(house_id: int):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==========================================
+# 🔍 추가된 API 3: 건물명/주소 검색 (자동 완성용)
+# ==========================================
+@app.get("/api/search")
+def search_buildings(keyword: str = ""):
+    # 2글자 미만이면 빈 결과 반환 (서버 부하 방지)
+    if not keyword or len(keyword) < 2:
+        return {"status": "success", "data": []}
+
+    try:
+        conn = psycopg2.connect(**DB_PARAMS)
+        cursor = conn.cursor()
+
+        # 건물명이나 주소에 '검색어'가 포함된 집을 최대 10개만 빠르게 찾아옵니다.
+        query = """
+            SELECT house_id, building_name, jibun_address, ST_X(geom) as lon, ST_Y(geom) as lat 
+            FROM houses 
+            WHERE building_name LIKE %s OR jibun_address LIKE %s 
+            LIMIT 10;
+        """
+        search_term = f"%{keyword}%"
+        cursor.execute(query, (search_term, search_term))
+        rows = cursor.fetchall()
+        conn.close()
+
+        results = []
+        for r in rows:
+            results.append({
+                "house_id": r[0],
+                "building_name": r[1] if r[1] else "이름 없는 주택",
+                "address": r[2],
+                "lon": r[3],
+                "lat": r[4]
+            })
+
+        return {"status": "success", "data": results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

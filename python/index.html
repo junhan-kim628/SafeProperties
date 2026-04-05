@@ -45,6 +45,18 @@
         .feature-table th { color: #666; font-weight: normal; width: 40%; }
         .feature-table td { font-weight: bold; color: #333; }
         #loading { display: none; text-align: center; padding: 50px 0; font-weight: bold; color: #3498db; }
+
+        /* 🌟 검색창 및 자동완성 목록 디자인 */
+        .search-box { position: absolute; top: 20px; left: 340px; z-index: 2; width: 300px; }
+        .search-input { width: 100%; padding: 13px 15px; border: none; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-size: 14px; box-sizing: border-box; outline: none; transition: box-shadow 0.2s; }
+        .search-input:focus { box-shadow: 0 4px 15px rgba(52, 152, 219, 0.4); }
+
+        .autocomplete-list { position: absolute; top: 50px; left: 0; width: 100%; background: white; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); max-height: 250px; overflow-y: auto; display: none; }
+        .autocomplete-item { padding: 12px 15px; border-bottom: 1px solid #f1f1f1; cursor: pointer; font-size: 13.5px; }
+        .autocomplete-item:last-child { border-bottom: none; }
+        .autocomplete-item:hover { background-color: #f8f9fa; }
+        .autocomplete-item strong { color: #2980b9; font-weight: 600; }
+        .autocomplete-item span { display: block; color: #7f8c8d; font-size: 11.5px; margin-top: 3px; }
     </style>
 </head>
 <body>
@@ -263,6 +275,74 @@
 
         function closePanel() { document.getElementById('side-panel').classList.remove('open'); }
         window.onload = function() { kakao.maps.load(function() { initMap(); }); };
+
+        // 🌟 새롭게 추가된 검색 & 자동완성 로직
+        let searchTimeout;
+
+        async function searchPlaces(keyword) {
+            const listDiv = document.getElementById('autocomplete-list');
+
+            if (!keyword || keyword.trim().length < 2) {
+                listDiv.style.display = 'none';
+                return;
+            }
+
+            // 디바운싱: 타이핑이 끝난 후 0.3초 뒤에만 서버로 요청 (부하 방지)
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/api/search?keyword=${keyword}`);
+                    const data = await response.json();
+
+                    listDiv.innerHTML = "";
+                    if (data.status === "success" && data.data.length > 0) {
+                        data.data.forEach(house => {
+                            let div = document.createElement("div");
+                            div.className = "autocomplete-item";
+                            div.innerHTML = `<strong>${house.building_name}</strong><span>${house.address}</span>`;
+
+                            // 자동완성 목록을 클릭했을 때의 행동
+                            div.onclick = function() {
+                                // 1. 지도 중심을 해당 집으로 휙! 이동시키고 부드럽게 확대
+                                let moveLatLon = new kakao.maps.LatLng(house.lat, house.lon);
+                                map.panTo(moveLatLon);
+                                map.setLevel(3); // 가까이 줌인
+
+                                // 2. 사이드 패널을 열어 AI 예측 결과 바로 보여주기
+                                openPanel(house);
+
+                                // 3. 검색창 정리
+                                listDiv.style.display = 'none';
+                                document.getElementById('search-input').value = house.building_name;
+                            };
+                            listDiv.appendChild(div);
+                        });
+                        listDiv.style.display = 'block';
+                    } else {
+                        listDiv.innerHTML = `<div class="autocomplete-item" style="color:#999; text-align:center;">검색 결과가 없습니다.</div>`;
+                        listDiv.style.display = 'block';
+                    }
+                } catch (error) {
+                    console.error("검색 에러:", error);
+                }
+            }, 300);
+        }
+
+        // 검색창 밖의 지도를 클릭하면 자동완성 목록 숨기기
+        document.addEventListener('click', function(e) {
+            if (e.target.id !== 'search-input') {
+                document.getElementById('autocomplete-list').style.display = 'none';
+            }
+        });
     </script>
 </body>
+<div class="header">
+        <h1>🔍 AI 전세 사기 예측 대시보드</h1>
+        <p>지도에서 주택 마커를 클릭하여 위험도를 분석하세요.</p>
+    </div>
+
+    <div class="search-box">
+        <input type="text" id="search-input" class="search-input" placeholder="건물명 또는 주소를 입력하세요 (2글자 이상)" autocomplete="off" onkeyup="searchPlaces(this.value)">
+        <div id="autocomplete-list" class="autocomplete-list"></div>
+    </div>
 </html>
