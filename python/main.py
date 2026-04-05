@@ -41,7 +41,7 @@ def serve_frontend():
 
 
 # ==========================================
-# 📍 수정된 API 1: 마커 가져오기 (DB 연동 완벽 동기화)
+# 📍 수정된 API 1: 마커 가져오기 (전세가 데이터 추가)
 # ==========================================
 @app.get("/api/markers")
 def get_map_markers(limit: int = 500):
@@ -52,7 +52,6 @@ def get_map_markers(limit: int = 500):
         cursor.execute(query, (limit,))
         rows = cursor.fetchall()
 
-        # DB에서 전체 피처 데이터를 한 번에 가져옵니다 (속도 최적화)
         df = pd.read_sql("SELECT * FROM house_analysis_data", conn)
         conn.close()
 
@@ -63,13 +62,13 @@ def get_map_markers(limit: int = 500):
         markers = []
         for r in rows:
             h_id = r[0]
-
-            # 🌟 핵심: predict API와 완벽하게 동일한 기준으로 데이터 매칭 (DB 전체 개수 기준)
             row_index = h_id % len(df)
-
-            # DB 데이터프레임에서 추출하여 예측
             X_input = df.iloc[[row_index]][features]
+
             pred = int(model.predict(X_input)[0])
+
+            # 🌟 새롭게 추가된 부분: 프론트엔드 라벨에 띄울 전세가 추출
+            jeonse_price = float(X_input['avg_jeonse_deposit'].values[0])
 
             markers.append({
                 "house_id": h_id,
@@ -77,7 +76,8 @@ def get_map_markers(limit: int = 500):
                 "address": r[2],
                 "lon": r[3],
                 "lat": r[4],
-                "risk": pred  # 이 값이 프론트엔드로 가서 마커 색상을 결정합니다.
+                "risk": pred,
+                "jeonse": jeonse_price  # 🌟 가격 데이터 추가 전송
             })
 
         return {"status": "success", "data": markers}
