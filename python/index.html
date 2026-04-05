@@ -12,7 +12,6 @@
         .header h1 { margin: 0; font-size: 20px; color: #333; }
         .header p { margin: 5px 0 0 0; font-size: 13px; color: #666; }
 
-        /* 🌟 검색창 및 자동완성 목록 디자인 */
         .search-box { position: absolute; top: 20px; left: 340px; z-index: 2; width: 300px; }
         .search-input { width: 100%; padding: 13px 15px; border: none; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-size: 14px; box-sizing: border-box; outline: none; transition: box-shadow 0.2s; }
         .search-input:focus { box-shadow: 0 4px 15px rgba(52, 152, 219, 0.4); }
@@ -24,13 +23,11 @@
         .autocomplete-item strong { color: #2980b9; font-weight: 600; }
         .autocomplete-item span { display: block; color: #7f8c8d; font-size: 11.5px; margin-top: 3px; }
 
-        /* 🌟 필터 버튼 디자인 */
         .filter-box { position: absolute; top: 95px; left: 20px; z-index: 2; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: flex; gap: 8px; }
         .filter-btn { padding: 8px 12px; border: 1px solid #ddd; background: white; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; transition: all 0.2s; }
         .filter-btn:hover { background: #f1f2f6; }
         .filter-btn.active { border-color: #3498db; background: #ebf5fb; color: #2980b9; }
 
-        /* 🌟 우측 사이드 패널 디자인 */
         #side-panel { position: absolute; top: 0; right: -400px; width: 360px; height: 100vh; background: white; z-index: 3; box-shadow: -4px 0 15px rgba(0,0,0,0.1); transition: right 0.3s ease-in-out; overflow-y: auto; }
         #side-panel.open { right: 0; }
         .panel-header { background: #2c3e50; color: white; padding: 20px; position: relative; }
@@ -44,7 +41,6 @@
         .risk-1 { background-color: #f39c12; }
         .risk-2 { background-color: #e74c3c; }
 
-        /* 🌟 XAI 사유 박스 디자인 */
         #ai-reason-box { margin-bottom: 20px; padding: 12px 15px; border-radius: 8px; display: none; }
         #ai-reason-text { margin: 5px 0 0 0; font-size: 13.5px; line-height: 1.5; font-weight: bold; }
 
@@ -61,11 +57,9 @@
         .feature-table td { font-weight: bold; color: #333; }
         #loading { display: none; text-align: center; padding: 50px 0; font-weight: bold; color: #3498db; }
 
-        /* 🌟 지도 위 가격표 말풍선 디자인 */
         .map-label { background: white; border-radius: 6px; padding: 6px 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.25); text-align: center; border: 1px solid #ddd; pointer-events: none; margin-top: 5px; }
         .label-name { font-size: 11px; font-weight: bold; color: #555; margin-bottom: 3px; white-space: nowrap; }
         .label-price { font-size: 13px; font-weight: 900; color: #2c3e50; white-space: nowrap; }
-        /* 위험도별 상단 테두리 포인트 */
         .risk-border-0 { border-top: 4px solid #27ae60; }
         .risk-border-1 { border-top: 4px solid #f39c12; }
         .risk-border-2 { border-top: 4px solid #e74c3c; }
@@ -138,9 +132,8 @@
 
     <script>
         const API_BASE_URL = "http://127.0.0.1:8000";
-        let map, clusterer, allMarkers = [], allOverlays = []; // 🌟 오버레이(말풍선) 배열 추가
+        let map, clusterer, allMarkers = [], allOverlays = [];
 
-        // 🌟 짧은 금액 포맷 함수 (오버레이 용)
         const formatShortMoney = (num) => {
             if (!num || num === 0) return "0원";
             let absNum = Math.abs(num);
@@ -168,12 +161,11 @@
 
                 if(data.status === "success") {
                     allMarkers = [];
-                    allOverlays = []; // 초기화
+                    allOverlays = [];
 
                     data.data.forEach(house => {
                         var markerPosition = new kakao.maps.LatLng(house.lat, house.lon);
 
-                        // 1. 기존 색상 마커 생성
                         let iconUrl = "https://maps.google.com/mapfiles/ms/icons/green-dot.png";
                         if(house.risk === 1) iconUrl = "https://maps.google.com/mapfiles/ms/icons/orange-dot.png";
                         if(house.risk === 2) iconUrl = "https://maps.google.com/mapfiles/ms/icons/red-dot.png";
@@ -183,9 +175,7 @@
                         kakao.maps.event.addListener(marker, 'click', function() { openPanel(house); });
                         allMarkers.push(marker);
 
-                        // 2. 🌟 건물명 + 전세가 말풍선(오버레이) 생성
                         let bldgName = house.building_name || "이름 없는 주택";
-                        // 만약 서버에서 jeonse 값을 안 줬을 경우 대비 (기본값 처리)
                         let jeonsePrice = house.jeonse || 0;
                         let priceText = formatShortMoney(jeonsePrice);
                         let content = `<div class="map-label risk-border-${house.risk}">
@@ -196,18 +186,30 @@
                         let customOverlay = new kakao.maps.CustomOverlay({
                             position: markerPosition,
                             content: content,
-                            yAnchor: -0.2 // 마커 아래 위치
+                            yAnchor: -0.2,
+                            zIndex: 1
                         });
                         customOverlay.risk = house.risk;
                         allOverlays.push(customOverlay);
-                    });
 
-                    // 마커 한방에 클러스터러에 넣기
+                        kakao.maps.event.addListener(marker, 'mouseover', function() {
+                            customOverlay.setZIndex(999);
+                            customOverlay.setMap(map);
+                        });
+
+                        kakao.maps.event.addListener(marker, 'mouseout', function() {
+                            customOverlay.setZIndex(1);
+                            if (map.getLevel() > 5) {
+                                customOverlay.setMap(null);
+                            }
+                        });
+                    }); // 🌟 여기가 forEach 끝나는 곳!
+
+                    // 🚨🚨 사용자님이 실수로 지우셨던 필수 코드 복구! 🚨🚨
                     clusterer.addMarkers(allMarkers);
                     if(data.data.length > 0) map.setCenter(new kakao.maps.LatLng(data.data[0].lat, data.data[0].lon));
 
-                    // 3. 🌟 지도 확대/축소 이벤트: 레벨 4 이하일 때만 말풍선 보이기
-                    updateOverlaysVisibility(); // 초기 로딩 시에도 체크
+                    updateOverlaysVisibility();
                     kakao.maps.event.addListener(map, 'zoom_changed', function() {
                         updateOverlaysVisibility();
                     });
@@ -215,7 +217,6 @@
             } catch (error) { console.error("마커 로드 에러:", error); }
         }
 
-        // 🌟 말풍선 보이기/숨기기를 관리하는 헬퍼 함수
         function updateOverlaysVisibility() {
             let level = map.getLevel();
             let activeBtn = document.querySelector('.filter-btn.active');
@@ -228,16 +229,14 @@
             }
 
             allOverlays.forEach(ov => {
-                // 줌 레벨이 4 이하 (확대)이고, 현재 필터 조건과 맞으면 띄우기
                 if (level <= 5 && (activeRisk === 'all' || ov.risk === activeRisk)) {
                     ov.setMap(map);
                 } else {
-                    ov.setMap(null); // 아니면 숨기기
+                    ov.setMap(null);
                 }
             });
         }
 
-        // 🌟 필터링 함수 수정 (오버레이도 함께 필터링)
         function filterMarkers(riskLevel, btnElement) {
             document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
             btnElement.classList.add('active');
@@ -246,11 +245,9 @@
 
             if (riskLevel === 'all') {
                 clusterer.addMarkers(allMarkers);
-                // 👇 기존의 <= 4 를 <= 6 으로 변경!
                 if (map.getLevel() <= 5) allOverlays.forEach(ov => ov.setMap(map));
             } else {
                 clusterer.addMarkers(allMarkers.filter(m => m.risk === riskLevel));
-                // 👇 기존의 <= 4 를 <= 6 으로 변경!
                 if (map.getLevel() <= 5) allOverlays.filter(ov => ov.risk === riskLevel).forEach(ov => ov.setMap(map));
             }
             updateOverlaysVisibility();
@@ -290,7 +287,6 @@
 
             const f = data.details;
 
-            // XAI 감지 사유 로직
             const reasonBox = document.getElementById('ai-reason-box');
             const reasonTitle = document.getElementById('ai-reason-title');
             const reasonText = document.getElementById('ai-reason-text');
@@ -363,7 +359,6 @@
         function closePanel() { document.getElementById('side-panel').classList.remove('open'); }
         window.onload = function() { kakao.maps.load(function() { initMap(); }); };
 
-        // 🌟 검색 & 자동완성 로직
         let searchTimeout;
 
         async function searchPlaces(keyword) {
@@ -390,7 +385,7 @@
                             div.onclick = function() {
                                 let moveLatLon = new kakao.maps.LatLng(house.lat, house.lon);
                                 map.panTo(moveLatLon);
-                                map.setLevel(3); // 가까이 줌인 (말풍선이 뜨는 레벨)
+                                map.setLevel(3);
 
                                 openPanel(house);
 
@@ -408,7 +403,6 @@
             }, 300);
         }
 
-        // 검색창 밖의 지도를 클릭하면 자동완성 목록 숨기기
         document.addEventListener('click', function(e) {
             if (e.target.id !== 'search-input') {
                 document.getElementById('autocomplete-list').style.display = 'none';

@@ -7,6 +7,7 @@ import pandas as pd
 
 app = FastAPI(title="전세 사기 예측 대시보드 API")
 
+# 프론트엔드 통신을 위한 CORS 설정
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,11 +16,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 🌟 사용자님의 데이터베이스 접속 정보
 DB_PARAMS = {
-    "host": "localhost", "database": "Jeonse_capstone",
-    "user": "postgres", "password": "9241", "port": "5432"
+    "host": "localhost",
+    "database": "Jeonse_capstone",
+    "user": "postgres",
+    "password": "9241",
+    "port": "5432"
 }
 
+# AI 모델 로드
 model = xgb.XGBClassifier()
 try:
     model.load_model("jeonse_risk_model.json")
@@ -27,9 +33,8 @@ try:
 except Exception as e:
     print(f"🚨 모델 로드 실패: {e}")
 
-
 # ==========================================
-# 🌟 여기가 핵심! 브라우저 접속 시 index.html 화면 띄우기
+# 🌟 기본 접속 화면 (index.html 렌더링)
 # ==========================================
 @app.get("/", response_class=HTMLResponse)
 def serve_frontend():
@@ -39,9 +44,8 @@ def serve_frontend():
     except FileNotFoundError:
         return "<h1>index.html 파일을 찾을 수 없습니다. 파일 위치를 확인해주세요.</h1>"
 
-
 # ==========================================
-# 📍 수정된 API 1: 마커 가져오기 (전세가 데이터 추가)
+# 📍 API 1: 지도 마커 데이터 가져오기 (전세 가격 포함)
 # ==========================================
 @app.get("/api/markers")
 def get_map_markers(limit: int = 500):
@@ -67,7 +71,7 @@ def get_map_markers(limit: int = 500):
 
             pred = int(model.predict(X_input)[0])
 
-            # 🌟 새롭게 추가된 부분: 프론트엔드 라벨에 띄울 전세가 추출
+            # 프론트엔드 라벨에 띄울 전세 가격 추출
             jeonse_price = float(X_input['avg_jeonse_deposit'].values[0])
 
             markers.append({
@@ -77,30 +81,29 @@ def get_map_markers(limit: int = 500):
                 "lon": r[3],
                 "lat": r[4],
                 "risk": pred,
-                "jeonse": jeonse_price  # 🌟 가격 데이터 추가 전송
+                "jeonse": jeonse_price  # 가격 데이터 추가 전송
             })
 
         return {"status": "success", "data": markers}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
 # ==========================================
-# 🧠 수정된 API 2: AI 예측하기 (DB 연동 완벽 동기화)
+# 🧠 API 2: 특정 매물 AI 위험도 예측하기
 # ==========================================
 @app.get("/api/predict/{house_id}")
 def predict_risk(house_id: int):
     try:
         conn = psycopg2.connect(**DB_PARAMS)
 
-        # 🌟 핵심: 마커 API와 동일하게 DB 전체 개수를 기준으로 매칭합니다.
+        # 마커 API와 동일하게 DB 전체 개수를 기준으로 매칭
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM house_analysis_data;")
         total_rows = cursor.fetchone()[0]
 
         row_index = house_id % total_rows
 
-        # 매칭된 id의 데이터를 DB에서 정확히 1건 가져옵니다.
+        # 매칭된 id의 데이터를 DB에서 정확히 1건 가져오기
         query = "SELECT * FROM house_analysis_data WHERE id = %s;"
         df_row = pd.read_sql(query, conn, params=(row_index,))
         conn.close()
@@ -113,6 +116,7 @@ def predict_risk(house_id: int):
                     'jeonse_rate_deviation']
         X_input = df_row[features]
 
+        # AI 예측 수행
         predicted_class = int(model.predict(X_input)[0])
         probabilities = model.predict_proba(X_input)[0]
         risk_labels = {0: "적정", 1: "주의", 2: "위험"}
@@ -131,9 +135,8 @@ def predict_risk(house_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
 # ==========================================
-# 🔍 추가된 API 3: 건물명/주소 검색 (자동 완성용)
+# 🔍 API 3: 건물명 및 주소 검색 (자동완성용)
 # ==========================================
 @app.get("/api/search")
 def search_buildings(keyword: str = ""):
@@ -145,7 +148,7 @@ def search_buildings(keyword: str = ""):
         conn = psycopg2.connect(**DB_PARAMS)
         cursor = conn.cursor()
 
-        # 건물명이나 주소에 '검색어'가 포함된 집을 최대 10개만 빠르게 찾아옵니다.
+        # 건물명이나 주소에 '검색어'가 포함된 집을 최대 10개만 빠르게 조회
         query = """
             SELECT house_id, building_name, jibun_address, ST_X(geom) as lon, ST_Y(geom) as lat 
             FROM houses 
