@@ -150,7 +150,32 @@
             var mapContainer = document.getElementById('map');
             var mapOption = { center: new kakao.maps.LatLng(37.566826, 126.9786567), level: 7 };
             map = new kakao.maps.Map(mapContainer, mapOption);
-            clusterer = new kakao.maps.MarkerClusterer({ map: map, averageCenter: true, minLevel: 5 });
+
+            // 🌟 클러스터러 옵션 대폭 업그레이드!
+            clusterer = new kakao.maps.MarkerClusterer({
+                map: map,
+                averageCenter: true,
+                minLevel: 5,
+                // 1. 숫자 뒤에 '매물' 글자 동적으로 붙이기
+                texts: function(count) {
+                    return count + " 매물";
+                },
+                // 2. 글자가 길어졌으므로 원의 크기를 키우고 세련된 앱 스타일로 디자인 변경
+                styles: [{
+                    width: '64px',
+                    height: '64px',
+                    background: 'rgba(52, 152, 219, 0.85)', // 맑고 신뢰감 있는 반투명 파란색
+                    borderRadius: '32px', // 완벽한 원형
+                    color: '#ffffff', // 텍스트는 흰색
+                    textAlign: 'center',
+                    fontWeight: 'bold',
+                    lineHeight: '64px', // 글씨를 상하 정렬 기준 정중앙에 배치
+                    fontSize: '13px',
+                    border: '2px solid rgba(255, 255, 255, 0.9)', // 깔끔한 흰색 띠
+                    boxShadow: '0 4px 10px rgba(0,0,0,0.15)' // 살짝 떠 있는 듯한 입체감 그림자
+                }]
+            });
+
             loadMarkers();
         }
 
