@@ -191,7 +191,7 @@
 
                             var markerPosition = new kakao.maps.LatLng(finalLat, finalLon);
 
-                            // 기존 마커 설정
+                            // 📍 마커 생성
                             let iconUrl = "https://maps.google.com/mapfiles/ms/icons/green-dot.png";
                             if(house.risk === 1) iconUrl = "https://maps.google.com/mapfiles/ms/icons/orange-dot.png";
                             if(house.risk === 2) iconUrl = "https://maps.google.com/mapfiles/ms/icons/red-dot.png";
@@ -201,50 +201,76 @@
                                 position: markerPosition,
                                 image: markerImage,
                                 clickable: true,
-                                zIndex: 1 // 마커의 기본 계층 추가
+                                zIndex: 1
                             });
                             marker.risk = house.risk;
+
+                            // 마커 클릭 이벤트
                             kakao.maps.event.addListener(marker, 'click', function() { openPanel(house); });
                             allMarkers.push(marker);
 
-                            // 말풍선 오버레이 설정
+                            // 💬 말풍선(오버레이)용 클릭 가능한 HTML 요소 생성
                             let bldgName = house.building_name || "이름 없는 주택";
                             let jeonsePrice = house.jeonse || 0;
                             let priceText = formatShortMoney(jeonsePrice);
-                            let content = `<div class="map-label risk-border-${house.risk}">
+
+                            let overlayDiv = document.createElement('div');
+                            overlayDiv.className = `map-label risk-border-${house.risk}`;
+                            overlayDiv.style.pointerEvents = 'auto'; // 클릭 허용
+                            overlayDiv.style.cursor = 'pointer';     // 마우스 손가락 모양
+                            overlayDiv.innerHTML = `
                                 <div class="label-name">${bldgName}</div>
                                 <div class="label-price">전세 ${priceText}</div>
-                            </div>`;
+                            `;
+
+                            // 말풍선 클릭 시 우측 패널 열기
+                            overlayDiv.onclick = function() {
+                                openPanel(house);
+                            };
 
                             let customOverlay = new kakao.maps.CustomOverlay({
                                 position: markerPosition,
-                                content: content,
+                                content: overlayDiv,
                                 yAnchor: -0.2,
                                 zIndex: 1
                             });
                             customOverlay.risk = house.risk;
                             allOverlays.push(customOverlay);
 
-                            // 🌟🌟 4. 마우스 호버 시 마커와 말풍선 "동시에" 최상단으로 끌어올리기
+                            // 🌟 4. 마커 & 말풍선 호버(Hover) 완벽 동기화
+
+                            // [말풍선]에 마우스 올렸을 때
+                            overlayDiv.onmouseover = function() {
+                                marker.setZIndex(999);
+                                customOverlay.setZIndex(999);
+                            };
+                            // [말풍선]에서 마우스 뗐을 때
+                            overlayDiv.onmouseout = function() {
+                                marker.setZIndex(1);
+                                customOverlay.setZIndex(1);
+                                if (map.getLevel() > 5) customOverlay.setMap(null);
+                            };
+
+                            // [마커]에 마우스 올렸을 때
                             kakao.maps.event.addListener(marker, 'mouseover', function() {
-                                marker.setZIndex(999);        // 마커 맨 앞으로!
-                                customOverlay.setZIndex(999); // 말풍선 맨 앞으로!
+                                marker.setZIndex(999);
+                                customOverlay.setZIndex(999);
                                 customOverlay.setMap(map);
                             });
-
+                            // [마커]에서 마우스 뗐을 때
                             kakao.maps.event.addListener(marker, 'mouseout', function() {
-                                marker.setZIndex(1);          // 마커 복구
-                                customOverlay.setZIndex(1);   // 말풍선 복구
-                                if (map.getLevel() > 5) {
-                                    customOverlay.setMap(null);
-                                }
+                                marker.setZIndex(1);
+                                customOverlay.setZIndex(1);
+                                if (map.getLevel() > 5) customOverlay.setMap(null);
                             });
                         });
                     }); // 🌟 그룹 순회 끝
 
+                    // 클러스터러에 마커 추가 및 지도 중심 이동
                     clusterer.addMarkers(allMarkers);
                     if(data.data.length > 0) map.setCenter(new kakao.maps.LatLng(data.data[0].lat, data.data[0].lon));
 
+                    // 초기 로딩 시 말풍선 표시 여부 계산 및 확대/축소 이벤트 등록
                     updateOverlaysVisibility();
                     kakao.maps.event.addListener(map, 'zoom_changed', function() {
                         updateOverlaysVisibility();
