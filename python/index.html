@@ -146,34 +146,36 @@
             return `${man.toLocaleString()}만`;
         };
 
+        // 🌟 클러스터 디자인 고정용 객체 정의
+        const clusterStyle = {
+            width: '64px',
+            height: '64px',
+            background: 'rgba(52, 152, 219, 0.85)',
+            borderRadius: '32px',
+            color: '#ffffff',
+            textAlign: 'center',
+            fontWeight: 'bold',
+            lineHeight: '64px',
+            fontSize: '13px',
+            border: '2px solid rgba(255, 255, 255, 0.9)',
+            boxShadow: '0 4px 10px rgba(0,0,0,0.15)'
+        };
+
         function initMap() {
             var mapContainer = document.getElementById('map');
             var mapOption = { center: new kakao.maps.LatLng(37.566826, 126.9786567), level: 7 };
             map = new kakao.maps.Map(mapContainer, mapOption);
 
-            // 🌟 클러스터러 옵션 대폭 업그레이드!
             clusterer = new kakao.maps.MarkerClusterer({
                 map: map,
                 averageCenter: true,
                 minLevel: 5,
-                // 1. 숫자 뒤에 '매물' 글자 동적으로 붙이기
                 texts: function(count) {
                     return count + " 매물";
                 },
-                // 2. 글자가 길어졌으므로 원의 크기를 키우고 세련된 앱 스타일로 디자인 변경
-                styles: [{
-                    width: '64px',
-                    height: '64px',
-                    background: 'rgba(52, 152, 219, 0.85)', // 맑고 신뢰감 있는 반투명 파란색
-                    borderRadius: '32px', // 완벽한 원형
-                    color: '#ffffff', // 텍스트는 흰색
-                    textAlign: 'center',
-                    fontWeight: 'bold',
-                    lineHeight: '64px', // 글씨를 상하 정렬 기준 정중앙에 배치
-                    fontSize: '13px',
-                    border: '2px solid rgba(255, 255, 255, 0.9)', // 깔끔한 흰색 띠
-                    boxShadow: '0 4px 10px rgba(0,0,0,0.15)' // 살짝 떠 있는 듯한 입체감 그림자
-                }]
+                // 🌟 해결 포인트 1: 10개 단위, 100개 단위 등 커질 때 디자인이 풀리지 않도록
+                // 동일한 스타일을 배열에 반복해서 넣어줍니다.
+                styles: [clusterStyle, clusterStyle, clusterStyle, clusterStyle, clusterStyle]
             });
 
             loadMarkers();
@@ -188,7 +190,6 @@
                     allMarkers = [];
                     allOverlays = [];
 
-                    // 🌟 1. 좌표(위치)가 완전히 똑같은 매물끼리 그룹으로 묶기
                     let locationGroup = {};
                     data.data.forEach(house => {
                         let key = `${house.lat}_${house.lon}`;
@@ -196,10 +197,8 @@
                         locationGroup[key].push(house);
                     });
 
-                    // 🌟 2. 흩뿌릴 반경 설정 (약 15m 정도)
                     const RADIUS = 0.00015;
 
-                    // 🌟 3. 그룹을 순회하며 마커 위치를 규칙적으로 계산
                     Object.values(locationGroup).forEach(group => {
                         let count = group.length;
 
@@ -207,16 +206,14 @@
                             let finalLat = house.lat;
                             let finalLon = house.lon;
 
-                            // 겹치는 매물이 2개 이상일 경우, 삼각함수를 이용해 원형으로 흩뿌림
                             if (count > 1) {
-                                let angle = (Math.PI * 2 * index) / count; // 360도를 개수만큼 분할
+                                let angle = (Math.PI * 2 * index) / count;
                                 finalLat += RADIUS * Math.cos(angle);
                                 finalLon += RADIUS * Math.sin(angle);
                             }
 
                             var markerPosition = new kakao.maps.LatLng(finalLat, finalLon);
 
-                            // 📍 마커 생성
                             let iconUrl = "https://maps.google.com/mapfiles/ms/icons/green-dot.png";
                             if(house.risk === 1) iconUrl = "https://maps.google.com/mapfiles/ms/icons/orange-dot.png";
                             if(house.risk === 2) iconUrl = "https://maps.google.com/mapfiles/ms/icons/red-dot.png";
@@ -230,25 +227,23 @@
                             });
                             marker.risk = house.risk;
 
-                            // 마커 클릭 이벤트
                             kakao.maps.event.addListener(marker, 'click', function() { openPanel(house); });
                             allMarkers.push(marker);
 
-                            // 💬 말풍선(오버레이)용 클릭 가능한 HTML 요소 생성
                             let bldgName = house.building_name || "이름 없는 주택";
                             let jeonsePrice = house.jeonse || 0;
                             let priceText = formatShortMoney(jeonsePrice);
 
                             let overlayDiv = document.createElement('div');
                             overlayDiv.className = `map-label risk-border-${house.risk}`;
-                            overlayDiv.style.pointerEvents = 'auto'; // 클릭 허용
+                            overlayDiv.style.pointerEvents = 'auto'; // CSS 마우스 이벤트 허용
                             overlayDiv.style.cursor = 'pointer';     // 마우스 손가락 모양
                             overlayDiv.innerHTML = `
                                 <div class="label-name">${bldgName}</div>
                                 <div class="label-price">전세 ${priceText}</div>
                             `;
 
-                            // 말풍선 클릭 시 우측 패널 열기
+                            // 🌟 말풍선 div에 클릭 이벤트 등록
                             overlayDiv.onclick = function() {
                                 openPanel(house);
                             };
@@ -257,45 +252,40 @@
                                 position: markerPosition,
                                 content: overlayDiv,
                                 yAnchor: -0.2,
-                                zIndex: 1
+                                zIndex: 1,
+                                clickable: true // 🌟 해결 포인트 2: 이 옵션이 없으면 카카오맵이 클릭을 가로챕니다!
                             });
                             customOverlay.risk = house.risk;
                             allOverlays.push(customOverlay);
 
-                            // 🌟 4. 마커 & 말풍선 호버(Hover) 완벽 동기화
-
-                            // [말풍선]에 마우스 올렸을 때
                             overlayDiv.onmouseover = function() {
                                 marker.setZIndex(999);
                                 customOverlay.setZIndex(999);
                             };
-                            // [말풍선]에서 마우스 뗐을 때
+
                             overlayDiv.onmouseout = function() {
                                 marker.setZIndex(1);
                                 customOverlay.setZIndex(1);
                                 if (map.getLevel() > 5) customOverlay.setMap(null);
                             };
 
-                            // [마커]에 마우스 올렸을 때
                             kakao.maps.event.addListener(marker, 'mouseover', function() {
                                 marker.setZIndex(999);
                                 customOverlay.setZIndex(999);
                                 customOverlay.setMap(map);
                             });
-                            // [마커]에서 마우스 뗐을 때
+
                             kakao.maps.event.addListener(marker, 'mouseout', function() {
                                 marker.setZIndex(1);
                                 customOverlay.setZIndex(1);
                                 if (map.getLevel() > 5) customOverlay.setMap(null);
                             });
                         });
-                    }); // 🌟 그룹 순회 끝
+                    });
 
-                    // 클러스터러에 마커 추가 및 지도 중심 이동
                     clusterer.addMarkers(allMarkers);
                     if(data.data.length > 0) map.setCenter(new kakao.maps.LatLng(data.data[0].lat, data.data[0].lon));
 
-                    // 초기 로딩 시 말풍선 표시 여부 계산 및 확대/축소 이벤트 등록
                     updateOverlaysVisibility();
                     kakao.maps.event.addListener(map, 'zoom_changed', function() {
                         updateOverlaysVisibility();
@@ -380,9 +370,24 @@
 
             if (data.prediction === "위험" || data.prediction === "주의") {
                 let reasons = [];
-                if (f.gap_amount <= 0) reasons.push("무자본 갭투자(깡통전세) 의심 매물");
-                else if (f.gap_amount < 30000000) reasons.push("전세가율이 매우 높아 보증금 미반환 위험 존재");
-                if (f.jeonse_rate_deviation > 5) reasons.push("인근 유사 매물 대비 전세가가 비정상적으로 높음");
+
+                let jeonseRate = (f.avg_jeonse_deposit / f.avg_sale_price) * 100;
+
+                if (f.gap_amount <= 0) {
+                    reasons.push("무자본 갭투자(깡통전세) 의심 매물");
+                } else if (jeonseRate >= 90) {
+                    reasons.push(`전세가율이 매우 높음 (${jeonseRate.toFixed(1)}%) - 보증금 미반환 위험`);
+                } else if (jeonseRate >= 80) {
+                    reasons.push(`전세가율 주의 수준 (${jeonseRate.toFixed(1)}%) - 경매 시 보증금 손실 가능성`);
+                }
+
+                if (f.build_age <= 2 && f.total_tx_count < 10) {
+                    reasons.push("신축 빌라 특유의 '깜깜이 시세' 패턴 감지 (거래 이력 부족)");
+                }
+
+                if (f.jeonse_rate_deviation > 5) {
+                    reasons.push(`인근 유사 매물 대비 전세가가 약 ${f.jeonse_rate_deviation.toFixed(1)}% 높음`);
+                }
 
                 if (reasons.length > 0) {
                     reasonText.innerHTML = "• " + reasons.join("<br>• ");
