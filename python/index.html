@@ -12,7 +12,6 @@
         .header h1 { margin: 0; font-size: 20px; color: #333; }
         .header p { margin: 5px 0 0 0; font-size: 13px; color: #666; }
 
-        /* 🌟 새롭게 추가된 필터 버튼 디자인 */
         .filter-box { position: absolute; top: 95px; left: 20px; z-index: 2; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: flex; gap: 8px; }
         .filter-btn { padding: 8px 12px; border: 1px solid #ddd; background: white; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; transition: all 0.2s; }
         .filter-btn:hover { background: #f1f2f6; }
@@ -25,10 +24,16 @@
         .panel-header p { margin: 5px 0 0 0; font-size: 14px; opacity: 0.8; }
         .close-btn { position: absolute; top: 15px; right: 20px; color: white; font-size: 24px; cursor: pointer; background: none; border: none; }
         .panel-content { padding: 20px; }
+
         .risk-badge { display: inline-block; padding: 8px 16px; border-radius: 20px; font-weight: bold; font-size: 16px; margin-bottom: 20px; color: white;}
         .risk-0 { background-color: #27ae60; }
         .risk-1 { background-color: #f39c12; }
         .risk-2 { background-color: #e74c3c; }
+
+        /* 🌟 XAI 사유 박스 디자인 */
+        #ai-reason-box { margin-bottom: 20px; padding: 12px 15px; border-radius: 8px; display: none; }
+        #ai-reason-text { margin: 5px 0 0 0; font-size: 13.5px; line-height: 1.5; font-weight: bold; }
+
         .prob-box { margin-bottom: 20px; background: #f8f9fa; padding: 15px; border-radius: 8px; }
         .prob-item { margin-bottom: 10px; }
         .prob-item:last-child { margin-bottom: 0; }
@@ -68,6 +73,12 @@
             <div id="loading">AI가 위험도를 분석 중입니다... 🤖</div>
             <div id="report-content" style="display: none;">
                 <div style="text-align: center;"><div id="risk-badge" class="risk-badge">위험도 판별 결과</div></div>
+
+                <div id="ai-reason-box">
+                    <strong id="ai-reason-title" style="font-size: 13px;">💡 AI 감지 사유</strong>
+                    <p id="ai-reason-text"></p>
+                </div>
+
                 <div class="prob-box">
                     <strong>🤖 AI 예측 확률</strong>
                     <div class="prob-item" style="margin-top:10px;"><div class="prob-label"><span>위험 (사기 의심)</span><span id="prob-2">0%</span></div><div class="prob-bar-bg"><div class="prob-bar" style="width: 0%; background: #e74c3c;" id="bar-2"></div></div></div>
@@ -98,15 +109,12 @@
 
     <script>
         const API_BASE_URL = "http://127.0.0.1:8000";
-        let map;
-        let clusterer;
-        let allMarkers = []; // 🌟 전체 마커를 기억해둘 저장소
+        let map, clusterer, allMarkers = [];
 
         function initMap() {
             var mapContainer = document.getElementById('map');
             var mapOption = { center: new kakao.maps.LatLng(37.566826, 126.9786567), level: 7 };
             map = new kakao.maps.Map(mapContainer, mapOption);
-
             clusterer = new kakao.maps.MarkerClusterer({ map: map, averageCenter: true, minLevel: 5 });
             loadMarkers();
         }
@@ -119,43 +127,27 @@
                 if(data.status === "success") {
                     allMarkers = data.data.map(house => {
                         var markerPosition = new kakao.maps.LatLng(house.lat, house.lon);
-
                         let iconUrl = "https://maps.google.com/mapfiles/ms/icons/green-dot.png";
                         if(house.risk === 1) iconUrl = "https://maps.google.com/mapfiles/ms/icons/orange-dot.png";
                         if(house.risk === 2) iconUrl = "https://maps.google.com/mapfiles/ms/icons/red-dot.png";
-
                         var markerImage = new kakao.maps.MarkerImage(iconUrl, new kakao.maps.Size(32, 32));
-
                         var marker = new kakao.maps.Marker({ position: markerPosition, image: markerImage, clickable: true });
-                        marker.risk = house.risk; // 🌟 마커 객체에 위험도 이름표 붙이기 (나중에 걸러내기 위함)
-
+                        marker.risk = house.risk;
                         kakao.maps.event.addListener(marker, 'click', function() { openPanel(house); });
                         return marker;
                     });
-
-                    clusterer.addMarkers(allMarkers); // 지도에 전체 마커 뿌리기
-
+                    clusterer.addMarkers(allMarkers);
                     if(data.data.length > 0) map.setCenter(new kakao.maps.LatLng(data.data[0].lat, data.data[0].lon));
                 }
             } catch (error) { console.error("마커 로드 에러:", error); }
         }
 
-        // 🌟 새롭게 추가된 마커 필터링 함수
         function filterMarkers(riskLevel, btnElement) {
-            // 버튼 색상 변경 (눌린 버튼만 파란색으로)
             document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
             btnElement.classList.add('active');
-
-            // 지도에서 클러스터러 초기화(싹 지우기)
             clusterer.clear();
-
-            // 조건에 맞는 마커만 골라서 클러스터러에 다시 넣기
-            if (riskLevel === 'all') {
-                clusterer.addMarkers(allMarkers);
-            } else {
-                let filtered = allMarkers.filter(m => m.risk === riskLevel);
-                clusterer.addMarkers(filtered);
-            }
+            if (riskLevel === 'all') clusterer.addMarkers(allMarkers);
+            else clusterer.addMarkers(allMarkers.filter(m => m.risk === riskLevel));
         }
 
         async function openPanel(house) {
@@ -190,6 +182,44 @@
             else if(data.prediction === "주의") badge.classList.add('risk-1');
             else badge.classList.add('risk-2');
 
+            const f = data.details;
+
+            // 🌟 3. XAI (설명 가능한 AI) 로직: 왜 위험/주의인지 계산해서 뿌려주기
+            const reasonBox = document.getElementById('ai-reason-box');
+            const reasonTitle = document.getElementById('ai-reason-title');
+            const reasonText = document.getElementById('ai-reason-text');
+
+            if (data.prediction === "위험" || data.prediction === "주의") {
+                let reasons = [];
+                // 갭 금액이 0원 이하(역전세)이거나 너무 적을 때
+                if (f.gap_amount <= 0) reasons.push("무자본 갭투자(깡통전세) 의심 매물");
+                else if (f.gap_amount < 30000000) reasons.push("전세가율이 매우 높아 보증금 미반환 위험 존재");
+
+                // 편차가 평균보다 비정상적으로 높을 때
+                if (f.jeonse_rate_deviation > 5) reasons.push("인근 유사 매물 대비 전세가가 비정상적으로 높음");
+
+                if (reasons.length > 0) {
+                    reasonText.innerHTML = "• " + reasons.join("<br>• ");
+                    reasonBox.style.display = "block";
+
+                    if(data.prediction === "위험") {
+                        reasonBox.style.backgroundColor = "#fff3f3";
+                        reasonBox.style.borderLeft = "4px solid #e74c3c";
+                        reasonTitle.style.color = "#c0392b";
+                        reasonText.style.color = "#c0392b";
+                    } else { // 주의
+                        reasonBox.style.backgroundColor = "#fdf2e9";
+                        reasonBox.style.borderLeft = "4px solid #e67e22";
+                        reasonTitle.style.color = "#d35400";
+                        reasonText.style.color = "#d35400";
+                    }
+                } else {
+                    reasonBox.style.display = "none";
+                }
+            } else {
+                reasonBox.style.display = "none"; // 적정이면 숨김
+            }
+
             document.getElementById('prob-0').innerText = data.probability['적정'] + '%';
             document.getElementById('bar-0').style.width = data.probability['적정'] + '%';
             document.getElementById('prob-1').innerText = data.probability['주의'] + '%';
@@ -197,7 +227,6 @@
             document.getElementById('prob-2').innerText = data.probability['위험'] + '%';
             document.getElementById('bar-2').style.width = data.probability['위험'] + '%';
 
-            const f = data.details;
             const formatMoney = (num) => {
                 if (!num || num === 0) return "0원";
                 let isNegative = num < 0;
@@ -233,7 +262,6 @@
         }
 
         function closePanel() { document.getElementById('side-panel').classList.remove('open'); }
-
         window.onload = function() { kakao.maps.load(function() { initMap(); }); };
     </script>
 </body>
