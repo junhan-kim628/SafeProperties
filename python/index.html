@@ -349,15 +349,34 @@
 
             const f = data.details;
 
+            // 🌟 보고서 논리를 반영한 XAI 감지 사유 고도화
             const reasonBox = document.getElementById('ai-reason-box');
             const reasonTitle = document.getElementById('ai-reason-title');
             const reasonText = document.getElementById('ai-reason-text');
 
             if (data.prediction === "위험" || data.prediction === "주의") {
                 let reasons = [];
-                if (f.gap_amount <= 0) reasons.push("무자본 갭투자(깡통전세) 의심 매물");
-                else if (f.gap_amount < 30000000) reasons.push("전세가율이 매우 높아 보증금 미반환 위험 존재");
-                if (f.jeonse_rate_deviation > 5) reasons.push("인근 유사 매물 대비 전세가가 비정상적으로 높음");
+
+                // 1. 전세가율 계산 (전세가 / 매매가 * 100)
+                let jeonseRate = (f.avg_jeonse_deposit / f.avg_sale_price) * 100;
+
+                if (f.gap_amount <= 0) {
+                    reasons.push("무자본 갭투자(깡통전세) 의심 매물");
+                } else if (jeonseRate >= 90) {
+                    reasons.push(`전세가율이 매우 높음 (${jeonseRate.toFixed(1)}%) - 보증금 미반환 위험`);
+                } else if (jeonseRate >= 80) {
+                    reasons.push(`전세가율 주의 수준 (${jeonseRate.toFixed(1)}%) - 경매 시 보증금 손실 가능성`);
+                }
+
+                // 2. 신축 깜깜이 시세 패턴 (2년 이하 신축 & 거래 건수 10건 미만)
+                if (f.build_age <= 2 && f.total_tx_count < 10) {
+                    reasons.push("신축 빌라 특유의 '깜깜이 시세' 패턴 감지 (거래 이력 부족)");
+                }
+
+                // 3. 주변 시세 대비 편차
+                if (f.jeonse_rate_deviation > 5) {
+                    reasons.push(`인근 유사 매물 대비 전세가가 약 ${f.jeonse_rate_deviation.toFixed(1)}% 높음`);
+                }
 
                 if (reasons.length > 0) {
                     reasonText.innerHTML = "• " + reasons.join("<br>• ");
