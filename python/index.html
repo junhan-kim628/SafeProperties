@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 전세 사기 예측 대시보드</title>
+    <title>AI 전세 위험도 예측 대시보드</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; overflow: hidden; }
         #map { width: 100%; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
@@ -68,7 +68,7 @@
 <body>
 
     <div class="header">
-        <h1>🔍 AI 전세 사기 예측 대시보드</h1>
+        <h1>🔍 AI 전세 위험도 예측 대시보드</h1>
         <p>지도에서 주택 마커를 클릭하여 위험도를 분석하세요.</p>
     </div>
 
@@ -104,15 +104,15 @@
 
                 <div class="prob-box">
                     <strong>🤖 AI 예측 확률</strong>
-                    <div class="prob-item" style="margin-top:10px;"><div class="prob-label"><span>위험 (사기 의심)</span><span id="prob-2">0%</span></div><div class="prob-bar-bg"><div class="prob-bar" style="width: 0%; background: #e74c3c;" id="bar-2"></div></div></div>
-                    <div class="prob-item"><div class="prob-label"><span>주의 (신중 검토)</span><span id="prob-1">0%</span></div><div class="prob-bar-bg"><div class="prob-bar" style="width: 0%; background: #f39c12;" id="bar-1"></div></div></div>
-                    <div class="prob-item"><div class="prob-label"><span>적정 (안전 범위)</span><span id="prob-0">0%</span></div><div class="prob-bar-bg"><div class="prob-bar" style="width: 0%; background: #27ae60;" id="bar-0"></div></div></div>
+                    <div class="prob-item" style="margin-top:10px;"><div class="prob-label"><span>위험</span><span id="prob-2">0%</span></div><div class="prob-bar-bg"><div class="prob-bar" style="width: 0%; background: #e74c3c;" id="bar-2"></div></div></div>
+                    <div class="prob-item"><div class="prob-label"><span>주의</span><span id="prob-1">0%</span></div><div class="prob-bar-bg"><div class="prob-bar" style="width: 0%; background: #f39c12;" id="bar-1"></div></div></div>
+                    <div class="prob-item"><div class="prob-label"><span>적정</span><span id="prob-0">0%</span></div><div class="prob-bar-bg"><div class="prob-bar" style="width: 0%; background: #27ae60;" id="bar-0"></div></div></div>
                 </div>
                 <strong>📊 핵심 지표 분석</strong>
                 <table class="feature-table">
                     <tr><th>평균 전세가</th><td id="feat-jeonse">0원</td></tr>
                     <tr><th>평균 매매가</th><td id="feat-sale">0원</td></tr>
-                    <tr><th>무자본 갭 금액</th><td id="feat-gap" style="color:#e74c3c;">0원</td></tr>
+                    <tr><th>전세가율</th><td id="feat-gap" style="color:#e74c3c;">0원</td></tr>
                     <tr><th>유사 매물 대비 편차</th><td id="feat-dev">0%</td></tr>
                     <tr><th>역세권 여부</th><td id="feat-station">-</td></tr>
                     <tr><th>건물 노후도</th><td id="feat-age">0년</td></tr>
@@ -146,11 +146,35 @@
             return `${man.toLocaleString()}만`;
         };
 
+        const clusterStyle = {
+            width: '64px',
+            height: '64px',
+            background: 'rgba(52, 152, 219, 0.85)',
+            borderRadius: '32px',
+            color: '#ffffff',
+            textAlign: 'center',
+            fontWeight: 'bold',
+            lineHeight: '64px',
+            fontSize: '13px',
+            border: '2px solid rgba(255, 255, 255, 0.9)',
+            boxShadow: '0 4px 10px rgba(0,0,0,0.15)'
+        };
+
         function initMap() {
             var mapContainer = document.getElementById('map');
             var mapOption = { center: new kakao.maps.LatLng(37.566826, 126.9786567), level: 7 };
             map = new kakao.maps.Map(mapContainer, mapOption);
-            clusterer = new kakao.maps.MarkerClusterer({ map: map, averageCenter: true, minLevel: 5 });
+
+            clusterer = new kakao.maps.MarkerClusterer({
+                map: map,
+                averageCenter: true,
+                minLevel: 5,
+                texts: function(count) {
+                    return count + " 매물";
+                },
+                styles: [clusterStyle, clusterStyle, clusterStyle, clusterStyle, clusterStyle]
+            });
+
             loadMarkers();
         }
 
@@ -163,7 +187,6 @@
                     allMarkers = [];
                     allOverlays = [];
 
-                    // 🌟 1. 좌표(위치)가 완전히 똑같은 매물끼리 그룹으로 묶기 (겹침 방지용)
                     let locationGroup = {};
                     data.data.forEach(house => {
                         let key = `${house.lat}_${house.lon}`;
@@ -171,10 +194,8 @@
                         locationGroup[key].push(house);
                     });
 
-                    // 🌟 2. 흩뿌릴 반경 설정 (약 15m 정도)
                     const RADIUS = 0.00015;
 
-                    // 🌟 3. 그룹을 순회하며 마커 위치 계산 및 생성
                     Object.values(locationGroup).forEach(group => {
                         let count = group.length;
 
@@ -182,7 +203,6 @@
                             let finalLat = house.lat;
                             let finalLon = house.lon;
 
-                            // 겹치는 매물이 2개 이상일 경우, 삼각함수를 이용해 원형으로 예쁘게 흩뿌림
                             if (count > 1) {
                                 let angle = (Math.PI * 2 * index) / count;
                                 finalLat += RADIUS * Math.cos(angle);
@@ -191,7 +211,6 @@
 
                             var markerPosition = new kakao.maps.LatLng(finalLat, finalLon);
 
-                            // 📍 마커 생성
                             let iconUrl = "https://maps.google.com/mapfiles/ms/icons/green-dot.png";
                             if(house.risk === 1) iconUrl = "https://maps.google.com/mapfiles/ms/icons/orange-dot.png";
                             if(house.risk === 2) iconUrl = "https://maps.google.com/mapfiles/ms/icons/red-dot.png";
@@ -205,69 +224,61 @@
                             });
                             marker.risk = house.risk;
 
-                            // 마커 클릭 이벤트
                             kakao.maps.event.addListener(marker, 'click', function() { openPanel(house); });
                             allMarkers.push(marker);
 
-                            // 💬 🌟 핵심 복구: 말풍선(오버레이)용 클릭 가능한 HTML 요소 생성
                             let bldgName = house.building_name || "이름 없는 주택";
                             let jeonsePrice = house.jeonse || 0;
                             let priceText = formatShortMoney(jeonsePrice);
 
-                            // 문자열이 아닌 실제 DIV 요소로 만들어서 클릭 기능을 넣습니다.
                             let overlayDiv = document.createElement('div');
                             overlayDiv.className = `map-label risk-border-${house.risk}`;
-                            overlayDiv.style.pointerEvents = 'auto'; // 클릭 허용!
-                            overlayDiv.style.cursor = 'pointer';     // 마우스 올리면 손가락 모양으로!
+                            overlayDiv.style.pointerEvents = 'auto';
+                            overlayDiv.style.cursor = 'pointer';
                             overlayDiv.innerHTML = `
                                 <div class="label-name">${bldgName}</div>
                                 <div class="label-price">전세 ${priceText}</div>
                             `;
 
-                            // 말풍선 클릭 시 우측 패널 열기 이벤트 연결
                             overlayDiv.onclick = function() {
                                 openPanel(house);
                             };
 
                             let customOverlay = new kakao.maps.CustomOverlay({
                                 position: markerPosition,
-                                content: overlayDiv, // 방금 만든 DIV를 통째로 넣습니다.
+                                content: overlayDiv,
                                 yAnchor: -0.2,
-                                zIndex: 1
+                                zIndex: 1,
+                                clickable: true
                             });
                             customOverlay.risk = house.risk;
                             allOverlays.push(customOverlay);
 
-                            // 🌟 4. 마커 & 말풍선 호버(Hover) 완벽 동기화
-
-                            // [말풍선]에 마우스 올렸을 때
                             overlayDiv.onmouseover = function() {
                                 marker.setZIndex(999);
                                 customOverlay.setZIndex(999);
                             };
-                            // [말풍선]에서 마우스 뗐을 때
+
                             overlayDiv.onmouseout = function() {
                                 marker.setZIndex(1);
                                 customOverlay.setZIndex(1);
                                 if (map.getLevel() > 5) customOverlay.setMap(null);
                             };
 
-                            // [마커]에 마우스 올렸을 때
                             kakao.maps.event.addListener(marker, 'mouseover', function() {
                                 marker.setZIndex(999);
                                 customOverlay.setZIndex(999);
                                 customOverlay.setMap(map);
                             });
-                            // [마커]에서 마우스 뗐을 때
+
                             kakao.maps.event.addListener(marker, 'mouseout', function() {
                                 marker.setZIndex(1);
                                 customOverlay.setZIndex(1);
                                 if (map.getLevel() > 5) customOverlay.setMap(null);
                             });
                         });
-                    }); // 그룹 순회 끝
+                    });
 
-                    // 클러스터러에 마커 추가 및 지도 중심 이동
                     clusterer.addMarkers(allMarkers);
                     if(data.data.length > 0) map.setCenter(new kakao.maps.LatLng(data.data[0].lat, data.data[0].lon));
 
@@ -349,16 +360,17 @@
 
             const f = data.details;
 
-            // 🌟 보고서 논리를 반영한 XAI 감지 사유 고도화
             const reasonBox = document.getElementById('ai-reason-box');
             const reasonTitle = document.getElementById('ai-reason-title');
             const reasonText = document.getElementById('ai-reason-text');
 
+            let jeonseRate = 0;
+            if (f.avg_sale_price && f.avg_sale_price > 0) {
+                jeonseRate = (f.avg_jeonse_deposit / f.avg_sale_price) * 100;
+            }
+
             if (data.prediction === "위험" || data.prediction === "주의") {
                 let reasons = [];
-
-                // 1. 전세가율 계산 (전세가 / 매매가 * 100)
-                let jeonseRate = (f.avg_jeonse_deposit / f.avg_sale_price) * 100;
 
                 if (f.gap_amount <= 0) {
                     reasons.push("무자본 갭투자(깡통전세) 의심 매물");
@@ -368,12 +380,10 @@
                     reasons.push(`전세가율 주의 수준 (${jeonseRate.toFixed(1)}%) - 경매 시 보증금 손실 가능성`);
                 }
 
-                // 2. 신축 깜깜이 시세 패턴 (2년 이하 신축 & 거래 건수 10건 미만)
                 if (f.build_age <= 2 && f.total_tx_count < 10) {
                     reasons.push("신축 빌라 특유의 '깜깜이 시세' 패턴 감지 (거래 이력 부족)");
                 }
 
-                // 3. 주변 시세 대비 편차
                 if (f.jeonse_rate_deviation > 5) {
                     reasons.push(`인근 유사 매물 대비 전세가가 약 ${f.jeonse_rate_deviation.toFixed(1)}% 높음`);
                 }
@@ -420,7 +430,11 @@
 
             document.getElementById('feat-jeonse').innerText = formatMoney(f.avg_jeonse_deposit);
             document.getElementById('feat-sale').innerText = formatMoney(f.avg_sale_price);
-            document.getElementById('feat-gap').innerText = formatMoney(f.gap_amount);
+
+            let gapMoneyText = formatMoney(f.gap_amount);
+            let rateText = jeonseRate > 0 ? `${jeonseRate.toFixed(1)}%` : "-";
+            document.getElementById('feat-gap').innerText = `${gapMoneyText} (${rateText})`;
+
             document.getElementById('feat-dev').innerText = f.jeonse_rate_deviation > 0 ? `평균보다 +${f.jeonse_rate_deviation.toFixed(1)}% 높음` : `평균보다 ${f.jeonse_rate_deviation.toFixed(1)}% 낮음`;
 
             let stationText = f.is_station_area === 1 ? "역세권" : "비역세권";
