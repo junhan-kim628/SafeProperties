@@ -175,6 +175,10 @@
                 styles: [clusterStyle, clusterStyle, clusterStyle, clusterStyle, clusterStyle]
             });
 
+            kakao.maps.event.addListener(map, 'click', function() {
+                closePanel();
+            });
+
             loadMarkers();
         }
 
