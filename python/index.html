@@ -444,7 +444,15 @@
                     clusterer.addMarkers(allMarkers);
                     if(data.data.length > 0) map.setCenter(new kakao.maps.LatLng(data.data[0].lat, data.data[0].lon));
                     updateOverlaysVisibility();
-                    kakao.maps.event.addListener(map, 'zoom_changed', function() { updateOverlaysVisibility(); });
+
+                    // 디바운스: 줌/이동 중 중복 호출 방지 (완료 후 150ms 뒤 1회만 실행)
+                    let overlayTimer;
+                    const debouncedUpdate = () => {
+                        clearTimeout(overlayTimer);
+                        overlayTimer = setTimeout(updateOverlaysVisibility, 150);
+                    };
+                    kakao.maps.event.addListener(map, 'zoom_changed', debouncedUpdate);
+                    kakao.maps.event.addListener(map, 'center_changed', debouncedUpdate);
                 }
             } catch (error) { console.error("마커 로드 에러:", error); }
         }
@@ -460,8 +468,12 @@
                 else if(activeBtn.innerText.includes("위험")) activeRisk = 2;
             }
 
+            // 뷰포트 필터링: 현재 화면 범위 내 오버레이만 DOM 조작
+            const bounds = map.getBounds();
             allOverlays.forEach(ov => {
-                if (level <= 5 && (activeRisk === 'all' || ov.risk === activeRisk)) ov.setMap(map);
+                const inView = bounds.contain(ov.getPosition());
+                const riskMatch = activeRisk === 'all' || ov.risk === activeRisk;
+                if (level <= 5 && inView && riskMatch) ov.setMap(map);
                 else ov.setMap(null);
             });
         }
@@ -471,13 +483,10 @@
             btnElement.classList.add('active');
             clusterer.clear();
 
-            if (riskLevel === 'all') {
-                clusterer.addMarkers(allMarkers);
-                if (map.getLevel() <= 5) allOverlays.forEach(ov => ov.setMap(map));
-            } else {
-                clusterer.addMarkers(allMarkers.filter(m => m.risk === riskLevel));
-                if (map.getLevel() <= 5) allOverlays.filter(ov => ov.risk === riskLevel).forEach(ov => ov.setMap(map));
-            }
+            const filtered = riskLevel === 'all' ? allMarkers : allMarkers.filter(m => m.risk === riskLevel);
+            clusterer.addMarkers(filtered);
+
+            // 오버레이 표시는 updateOverlaysVisibility에서 통합 처리
             updateOverlaysVisibility();
         }
 
