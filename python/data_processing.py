@@ -45,12 +45,12 @@ def get_raw_data():
 
 def assign_risk_label(jeonse_rate):
     if pd.isna(jeonse_rate): return np.nan
-    if 50 <= jeonse_rate <= 70:
-        return 0
-    elif (40 <= jeonse_rate < 50) or (70 < jeonse_rate <= 80):
-        return 1
+    if jeonse_rate <= 70:
+        return 0   # 적정: 전세가율 70% 이하 (보증금 회수 안전)
+    elif jeonse_rate <= 85:
+        return 1   # 주의: 70~85% (경매 시 손실 가능성)
     else:
-        return 2
+        return 2   # 위험: 85% 초과 (깡통전세 위험, HUG 기준 90% 경고선 보수적 적용)
 
 
 def main():
