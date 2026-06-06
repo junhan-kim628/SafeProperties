@@ -11,12 +11,15 @@ load_dotenv()
 
 app = FastAPI(title="전세 사기 예측 대시보드 API")
 
-# 프론트엔드 통신을 위한 CORS 설정
+# 허용할 origin 목록을 환경변수에서 읽음 (콤마 구분)
+_raw_origins = os.getenv("ALLOW_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000")
+ALLOW_ORIGINS = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=ALLOW_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET"],
     allow_headers=["*"],
 )
 
