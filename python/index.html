@@ -650,7 +650,7 @@
             clearTimeout(searchTimeout);
             searchTimeout = setTimeout(async () => {
                 try {
-                    const response = await fetch(`${API_BASE_URL}/api/search?keyword=${keyword}`);
+                    const response = await fetch(`${API_BASE_URL}/api/search?keyword=${encodeURIComponent(keyword)}`);
                     const data = await response.json();
 
                     listDiv.innerHTML = "";
