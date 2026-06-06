@@ -3,6 +3,7 @@ import numpy as np
 import xgboost as xgb
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score
+from sklearn.utils.class_weight import compute_sample_weight
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -47,7 +48,9 @@ def main():
         random_state=42
     )
 
-    model.fit(X_train, y_train)
+    # 클래스 불균형 보정: 소수 클래스에 더 높은 가중치 부여
+    sample_weights = compute_sample_weight(class_weight='balanced', y=y_train)
+    model.fit(X_train, y_train, sample_weight=sample_weights)
     print("✅ 학습 완료!\n")
 
     # 5. 모델 평가
