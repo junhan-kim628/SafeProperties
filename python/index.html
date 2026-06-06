@@ -334,13 +334,21 @@
 
                             let bldgName = house.building_name || "이름 없는 주택";
                             let priceText = formatShortMoney(house.jeonse || 0);
-                            let content = `<div class="map-label risk-border-${house.risk}" style="pointer-events: auto; cursor: pointer;">
-                                <div class="label-name">${bldgName}</div>
-                                <div class="label-price">전세 ${priceText}</div>
-                            </div>`;
+
+                            let mapLabel = document.createElement('div');
+                            mapLabel.className = `map-label risk-border-${parseInt(house.risk, 10)}`;
+                            mapLabel.style.cssText = 'pointer-events: auto; cursor: pointer;';
+                            let nameDiv = document.createElement('div');
+                            nameDiv.className = 'label-name';
+                            nameDiv.textContent = bldgName;
+                            let priceDiv = document.createElement('div');
+                            priceDiv.className = 'label-price';
+                            priceDiv.textContent = `전세 ${priceText}`;
+                            mapLabel.appendChild(nameDiv);
+                            mapLabel.appendChild(priceDiv);
 
                             let overlayDiv = document.createElement('div');
-                            overlayDiv.innerHTML = content;
+                            overlayDiv.appendChild(mapLabel);
                             overlayDiv.onclick = function() { openPanel(house); };
 
                             let customOverlay = new kakao.maps.CustomOverlay({ position: markerPosition, content: overlayDiv, yAnchor: -0.2, zIndex: 1, clickable: true });
@@ -650,7 +658,12 @@
                         data.data.forEach(house => {
                             let div = document.createElement("div");
                             div.className = "autocomplete-item";
-                            div.innerHTML = `<strong>${house.building_name}</strong><span>${house.address}</span>`;
+                            let strong = document.createElement('strong');
+                            strong.textContent = house.building_name;
+                            let span = document.createElement('span');
+                            span.textContent = house.address;
+                            div.appendChild(strong);
+                            div.appendChild(span);
 
                             div.onclick = function() {
                                 let moveLatLon = new kakao.maps.LatLng(house.lat, house.lon);
