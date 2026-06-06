@@ -1,17 +1,21 @@
 import pandas as pd
 import psycopg2
 import numpy as np
+import os
 from datetime import datetime
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ==========================================
 # 1. DB 연결 설정
 # ==========================================
 DB_PARAMS = {
-    "host": "localhost",
-    "database": "Jeonse_capstone",
-    "user": "postgres",
-    "password": "9241",
-    "port": "5432"
+    "host": os.getenv("DB_HOST", "localhost"),
+    "database": os.getenv("DB_NAME", "Jeonse_capstone"),
+    "user": os.getenv("DB_USER", "postgres"),
+    "password": os.getenv("DB_PASSWORD"),
+    "port": os.getenv("DB_PORT", "5432"),
 }
 
 

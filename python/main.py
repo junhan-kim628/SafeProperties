@@ -4,6 +4,10 @@ from fastapi.responses import HTMLResponse
 import psycopg2
 import xgboost as xgb
 import pandas as pd
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI(title="전세 사기 예측 대시보드 API")
 
@@ -16,13 +20,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 🌟 사용자님의 데이터베이스 접속 정보
 DB_PARAMS = {
-    "host": "localhost",
-    "database": "Jeonse_capstone",
-    "user": "postgres",
-    "password": "9241",
-    "port": "5432"
+    "host": os.getenv("DB_HOST", "localhost"),
+    "database": os.getenv("DB_NAME", "Jeonse_capstone"),
+    "user": os.getenv("DB_USER", "postgres"),
+    "password": os.getenv("DB_PASSWORD"),
+    "port": os.getenv("DB_PORT", "5432"),
 }
 
 # AI 모델 로드
