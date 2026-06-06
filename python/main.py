@@ -1,9 +1,13 @@
+import sys
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 import psycopg2
 import xgboost as xgb
 import pandas as pd
+import shap
 import os
 from dotenv import load_dotenv
 
@@ -38,6 +42,30 @@ try:
     print("✅ AI 모델 로드 성공!")
 except Exception as e:
     print(f"🚨 모델 로드 실패: {e}")
+
+# SHAP Explainer 초기화 (서버 시작 시 1회)
+shap_explainer = None
+try:
+    shap_explainer = shap.TreeExplainer(model)
+    print("✅ SHAP Explainer 초기화 성공!")
+except Exception as e:
+    print(f"⚠️ SHAP Explainer 초기화 실패: {e}")
+
+# 피처 한글 이름 매핑
+FEATURE_NAMES_KR = {
+    "building_type_code": "건물 유형",
+    "build_age":          "건물 노후도",
+    "exclusive_area":     "전용 면적",
+    "floor":              "층수",
+    "dist_to_subway":     "지하철 거리",
+    "is_station_area":    "역세권 여부",
+    "avg_sale_price":     "평균 매매가",
+    "avg_jeonse_deposit": "평균 전세가",
+    "gap_amount":         "갭 금액",
+    "total_tx_count":     "거래 건수",
+    "group_avg_jeonse_rate":  "지역 전세가율",
+    "jeonse_rate_deviation":  "전세가율 편차",
+}
 
 # ==========================================
 # 🌟 기본 접속 화면 (index.html 렌더링)
@@ -132,6 +160,27 @@ def predict_risk(house_id: int):
         probabilities = model.predict_proba(X_input)[0]
         risk_labels = {0: "적정", 1: "주의", 2: "위험"}
 
+        # SHAP 기여도 계산 (위험 클래스 기준으로 통일)
+        # 양수 = 위험을 높이는 요인 / 음수 = 위험을 낮추는 요인
+        shap_contributions = []
+        if shap_explainer:
+            try:
+                shap_vals = shap_explainer.shap_values(X_input)
+                # shap_vals: list[3] 각 (1, 12) 또는 ndarray (1, 12, 3)
+                if isinstance(shap_vals, list):
+                    danger_shap = shap_vals[2][0]   # 위험(class 2) 기여도
+                else:
+                    danger_shap = shap_vals[0, :, 2]
+
+                shap_contributions = sorted(
+                    [{"feature": FEATURE_NAMES_KR.get(f, f), "shap": round(float(v), 4)}
+                     for f, v in zip(features, danger_shap)],
+                    key=lambda x: abs(x["shap"]),
+                    reverse=True
+                )[:5]
+            except Exception as e:
+                print(f"SHAP 계산 오류: {e}")
+
         return {
             "status": "success",
             "house_id": house_id,
@@ -141,7 +190,8 @@ def predict_risk(house_id: int):
                 "주의": round(float(probabilities[1]) * 100, 2),
                 "위험": round(float(probabilities[2]) * 100, 2)
             },
-            "details": X_input.to_dict(orient="records")[0]
+            "details": X_input.to_dict(orient="records")[0],
+            "shap_contributions": shap_contributions
         }
     except HTTPException:
         raise
