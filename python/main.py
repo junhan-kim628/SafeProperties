@@ -8,6 +8,7 @@ import psycopg2
 import xgboost as xgb
 import pandas as pd
 import shap
+import requests
 import os
 from dotenv import load_dotenv
 
@@ -34,6 +35,13 @@ DB_PARAMS = {
     "password": os.getenv("DB_PASSWORD"),
     "port": os.getenv("DB_PORT", "5432"),
 }
+
+# 국토부 건축물대장 API
+BUILDING_API_KEY = os.getenv(
+    "BUILDING_API_KEY",
+    "1yxixfObrK/iZ+cdWrx0xzZA8aIl5mifDFcE6rR9yEubodK1qo7WP+zvQbjprnEkBzq/EsVAvv8LbUD9EOCB7g=="
+)
+BUILDING_API_URL = "http://apis.data.go.kr/1613000/BldRgstService_v2/getBrTitleInfo"
 
 # AI 모델 로드
 model = xgb.XGBClassifier()
@@ -284,3 +292,81 @@ def search_buildings(keyword: str = ""):
     finally:
         if conn:
             conn.close()
+
+# ==========================================
+# 🏛️ API 5: 국토부 건축물대장 API 중계
+# ==========================================
+@app.get("/api/building-info")
+def get_building_info(sigungu_cd: str = "", bjdong_cd: str = "", bun: str = "0", ji: str = "0"):
+    """국토부 건축물대장 표제부 조회 — 위반건축물 여부, 용도, 가구수, 주차, 엘리베이터"""
+    if not sigungu_cd or not bjdong_cd:
+        raise HTTPException(status_code=400, detail="sigungu_cd, bjdong_cd는 필수 파라미터입니다.")
+
+    try:
+        params = {
+            "serviceKey": BUILDING_API_KEY,
+            "sigunguCd": sigungu_cd,
+            "bjdongCd":  bjdong_cd,
+            "bun":       bun.zfill(4),   # 본번 4자리 패딩
+            "ji":        ji.zfill(4),    # 부번 4자리 패딩
+            "numOfRows": "100",
+            "pageNo":    "1",
+            "_type":     "json",
+        }
+        resp = requests.get(BUILDING_API_URL, params=params, timeout=5)
+        resp.raise_for_status()
+        json_data = resp.json()
+
+        # 응답 구조: response.body.items.item
+        body      = json_data.get("response", {}).get("body", {})
+        items_obj = body.get("items", {}) or {}
+        item_list = items_obj.get("item", [])
+
+        # 단건 응답(dict)을 리스트로 통일
+        if isinstance(item_list, dict):
+            item_list = [item_list]
+
+        if not item_list:
+            return {
+                "status": "success",
+                "data": {
+                    "violation":     "정보 없음",
+                    "purpose":       "정보 없음",
+                    "household_cnt": "0",
+                    "parking_cnt":   "0",
+                    "elevator_cnt":  "0",
+                    "is_danger":     False,
+                }
+            }
+
+        # 첫 번째 항목 사용 (표제부 대표 데이터)
+        item = item_list[0]
+        violation_raw = str(item.get("vltnBldYn", "N")).strip().upper()
+        is_danger = violation_raw in ("Y", "1")
+
+        return {
+            "status": "success",
+            "data": {
+                "violation":     "위반건축물" if is_danger else "적법",
+                "purpose":       str(item.get("mainPurpsCdNm") or "정보 없음"),
+                "household_cnt": str(item.get("hhldCnt") or "0"),
+                "parking_cnt":   str(item.get("prkcnt")  or "0"),
+                "elevator_cnt":  str(item.get("elvtCnt") or "0"),
+                "is_danger":     is_danger,
+            }
+        }
+    except Exception as e:
+        # 정부 API가 불안정하거나 키 미등록 시 → 에러를 전파하지 않고 "정보 없음"으로 처리
+        # 프론트엔드가 "API 통신 실패" 대신 "정보 없음"을 표시하도록 함
+        print(f"⚠️ 건축물대장 API 조회 실패 (sigungu={sigungu_cd}, bjdong={bjdong_cd}): {e}")
+        return {
+            "status": "success",
+            "data": {
+                "violation":     "정보 없음",
+                "purpose":       "정보 없음",
+                "household_cnt": "0",
+                "parking_cnt":   "0",
+                "elevator_cnt":  "0",
+                "is_danger":     False,
+            }
+        }
