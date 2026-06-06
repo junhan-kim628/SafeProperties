@@ -90,7 +90,7 @@ def serve_frontend():
 # 📍 API 1: 지도 마커 데이터 가져오기 (전세 가격 포함)
 # ==========================================
 @app.get("/api/markers")
-def get_map_markers(limit: int = 5000):
+def get_map_markers(limit: int = 50000):
     conn = None
     try:
         conn = psycopg2.connect(**DB_PARAMS)
