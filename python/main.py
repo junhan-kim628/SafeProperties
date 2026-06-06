@@ -55,6 +55,7 @@ def serve_frontend():
 # ==========================================
 @app.get("/api/markers")
 def get_map_markers(limit: int = 500):
+    conn = None
     try:
         conn = psycopg2.connect(**DB_PARAMS)
         cursor = conn.cursor()
@@ -74,7 +75,6 @@ def get_map_markers(limit: int = 500):
         """
         cursor.execute(query, (limit,))
         rows = cursor.fetchall()
-        conn.close()
 
         features = ['building_type_code', 'build_age', 'exclusive_area', 'floor', 'dist_to_subway', 'is_station_area',
                     'avg_sale_price', 'avg_jeonse_deposit', 'gap_amount', 'total_tx_count', 'group_avg_jeonse_rate',
@@ -99,12 +99,16 @@ def get_map_markers(limit: int = 500):
         return {"status": "success", "data": markers}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if conn:
+            conn.close()
 
 # ==========================================
 # 🧠 API 2: 특정 매물 AI 위험도 예측하기
 # ==========================================
 @app.get("/api/predict/{house_id}")
 def predict_risk(house_id: int):
+    conn = None
     try:
         conn = psycopg2.connect(**DB_PARAMS)
         cursor = conn.cursor()
@@ -117,7 +121,6 @@ def predict_risk(house_id: int):
         query = f"SELECT {', '.join(features)} FROM house_analysis_data WHERE house_id = %s;"
         cursor.execute(query, (house_id,))
         row = cursor.fetchone()
-        conn.close()
 
         if not row:
             raise HTTPException(status_code=404, detail="데이터를 찾을 수 없습니다.")
@@ -144,6 +147,9 @@ def predict_risk(house_id: int):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if conn:
+            conn.close()
 
 # ==========================================
 # 📈 API 3: 연도별 매매가·전세가 추이 조회
@@ -192,21 +198,21 @@ def search_buildings(keyword: str = ""):
     if not keyword or len(keyword) < 2:
         return {"status": "success", "data": []}
 
+    conn = None
     try:
         conn = psycopg2.connect(**DB_PARAMS)
         cursor = conn.cursor()
 
         # 건물명이나 주소에 '검색어'가 포함된 집을 최대 10개만 빠르게 조회
         query = """
-            SELECT house_id, building_name, jibun_address, ST_X(geom) as lon, ST_Y(geom) as lat 
-            FROM houses 
-            WHERE building_name LIKE %s OR jibun_address LIKE %s 
+            SELECT house_id, building_name, jibun_address, ST_X(geom) as lon, ST_Y(geom) as lat
+            FROM houses
+            WHERE building_name LIKE %s OR jibun_address LIKE %s
             LIMIT 10;
         """
         search_term = f"%{keyword}%"
         cursor.execute(query, (search_term, search_term))
         rows = cursor.fetchall()
-        conn.close()
 
         results = []
         for r in rows:
@@ -221,3 +227,6 @@ def search_buildings(keyword: str = ""):
         return {"status": "success", "data": results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if conn:
+            conn.close()
