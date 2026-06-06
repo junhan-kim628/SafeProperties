@@ -146,7 +146,45 @@ def predict_risk(house_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ==========================================
-# 🔍 API 3: 건물명 및 주소 검색 (자동완성용)
+# 📈 API 3: 연도별 매매가·전세가 추이 조회
+# ==========================================
+@app.get("/api/trend/{house_id}")
+def get_price_trend(house_id: int):
+    conn = None
+    try:
+        conn = psycopg2.connect(**DB_PARAMS)
+        cursor = conn.cursor()
+        query = """
+            SELECT
+                EXTRACT(YEAR FROM deal_date)::int AS year,
+                AVG(CASE WHEN deal_type = '매매' THEN deal_amount END) AS avg_sale,
+                AVG(CASE WHEN deal_type = '전세' THEN deposit END) AS avg_jeonse
+            FROM transactions
+            WHERE house_id = %s
+            GROUP BY year
+            ORDER BY year;
+        """
+        cursor.execute(query, (house_id,))
+        rows = cursor.fetchall()
+        return {
+            "status": "success",
+            "data": [
+                {
+                    "year": r[0],
+                    "avg_sale": float(r[1]) if r[1] else None,
+                    "avg_jeonse": float(r[2]) if r[2] else None,
+                }
+                for r in rows
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if conn:
+            conn.close()
+
+# ==========================================
+# 🔍 API 4: 건물명 및 주소 검색 (자동완성용)
 # ==========================================
 @app.get("/api/search")
 def search_buildings(keyword: str = ""):
