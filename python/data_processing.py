@@ -1,30 +1,27 @@
 import pandas as pd
-import psycopg2
 import numpy as np
 import os
 from datetime import datetime
 from dotenv import load_dotenv
+from sqlalchemy import create_engine
 
 load_dotenv()
 
-# ==========================================
-# 1. DB 연결 설정
-# ==========================================
-DB_PARAMS = {
-    "host": os.getenv("DB_HOST", "localhost"),
-    "database": os.getenv("DB_NAME", "Jeonse_capstone"),
-    "user": os.getenv("DB_USER", "postgres"),
-    "password": os.getenv("DB_PASSWORD"),
-    "port": os.getenv("DB_PORT", "5432"),
-}
+
+def get_db_engine():
+    url = (
+        f"postgresql+psycopg2://{os.getenv('DB_USER', 'postgres')}:"
+        f"{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST', 'localhost')}:"
+        f"{os.getenv('DB_PORT', '5432')}/{os.getenv('DB_NAME', 'Jeonse_capstone')}"
+    )
+    return create_engine(url)
 
 
 def get_raw_data():
-    conn = psycopg2.connect(**DB_PARAMS)
+    engine = get_db_engine()
 
-    # 층수, 전용면적, 지하철 거리 등 ML에 필요한 모든 원본 데이터를 DB에서 집계합니다.
     query = """
-        SELECT 
+        SELECT
             h.house_id,
             h.region_code,
             h.building_type,
@@ -43,19 +40,17 @@ def get_raw_data():
         GROUP BY h.house_id, h.region_code, h.building_type, h.build_year, h.dist_to_subway, h.is_station_area
     """
 
-    df = pd.read_sql_query(query, conn)
-    conn.close()
-    return df
+    return pd.read_sql_query(query, engine)
 
 
 def assign_risk_label(jeonse_rate):
     if pd.isna(jeonse_rate): return np.nan
-    if 50 <= jeonse_rate <= 70:
-        return 0
-    elif (40 <= jeonse_rate < 50) or (70 < jeonse_rate <= 80):
-        return 1
+    if jeonse_rate <= 70:
+        return 0   # 적정: 전세가율 70% 이하 (보증금 회수 안전)
+    elif jeonse_rate <= 85:
+        return 1   # 주의: 70~85% (경매 시 손실 가능성)
     else:
-        return 2
+        return 2   # 위험: 85% 초과 (깡통전세 위험, HUG 기준 90% 경고선 보수적 적용)
 
 
 def main():
@@ -99,6 +94,7 @@ def main():
 
     # 모델에 들어갈 최종 컬럼 리스트
     ml_columns = [
+        'house_id',  # houses 테이블과의 JOIN 키
         'building_type_code', 'build_age', 'exclusive_area', 'floor',
         'dist_to_subway', 'is_station_area',
         'avg_sale_price', 'avg_jeonse_deposit', 'gap_amount',
