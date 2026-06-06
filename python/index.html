@@ -372,7 +372,7 @@
 
         async function loadMarkers() {
             try {
-                const response = await fetch(`${API_BASE_URL}/api/markers?limit=500`);
+                const response = await fetch(`${API_BASE_URL}/api/markers`);
                 const data = await response.json();
 
                 if(data.status === "success") {

@@ -82,13 +82,13 @@ def serve_frontend():
 # 📍 API 1: 지도 마커 데이터 가져오기 (전세 가격 포함)
 # ==========================================
 @app.get("/api/markers")
-def get_map_markers(limit: int = 500):
+def get_map_markers(limit: int = 5000):
     conn = None
     try:
         conn = psycopg2.connect(**DB_PARAMS)
         cursor = conn.cursor()
 
-        # houses와 house_analysis_data를 house_id로 JOIN하여 한 번에 조회
+        # region_code(구) 기준으로 균등 샘플링하여 특정 지역이 누락되지 않도록 함
         query = """
             SELECT h.house_id, h.building_name, h.jibun_address,
                    ST_X(h.geom) AS lon, ST_Y(h.geom) AS lat,
@@ -99,6 +99,7 @@ def get_map_markers(limit: int = 500):
             FROM houses h
             JOIN house_analysis_data a ON h.house_id = a.house_id
             WHERE h.geom IS NOT NULL
+            ORDER BY h.region_code, h.house_id
             LIMIT %s;
         """
         cursor.execute(query, (limit,))
@@ -109,20 +110,23 @@ def get_map_markers(limit: int = 500):
                     'jeonse_rate_deviation']
         col_names = ['house_id', 'building_name', 'address', 'lon', 'lat'] + features
 
-        markers = []
-        for r in rows:
-            row = dict(zip(col_names, r))
-            X_input = pd.DataFrame([{f: row[f] for f in features}])
-            pred = int(model.predict(X_input)[0])
-            markers.append({
-                "house_id": row['house_id'],
-                "building_name": row['building_name'],
-                "address": row['address'],
-                "lon": row['lon'],
-                "lat": row['lat'],
-                "risk": pred,
-                "jeonse": float(row['avg_jeonse_deposit']) if row['avg_jeonse_deposit'] else 0,
-            })
+        # 배치 예측: 1건씩 반복 호출 대신 전체를 한 번에 처리 (속도 대폭 향상)
+        row_dicts = [dict(zip(col_names, r)) for r in rows]
+        X_batch = pd.DataFrame([{f: rd[f] for f in features} for rd in row_dicts])
+        preds = model.predict(X_batch).tolist()
+
+        markers = [
+            {
+                "house_id": rd['house_id'],
+                "building_name": rd['building_name'],
+                "address": rd['address'],
+                "lon": rd['lon'],
+                "lat": rd['lat'],
+                "risk": int(pred),
+                "jeonse": float(rd['avg_jeonse_deposit']) if rd['avg_jeonse_deposit'] else 0,
+            }
+            for rd, pred in zip(row_dicts, preds)
+        ]
 
         return {"status": "success", "data": markers}
     except Exception as e:
