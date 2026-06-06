@@ -649,7 +649,7 @@
         }
 
         function closePanel() { document.getElementById('side-panel').classList.remove('open'); }
-        window.onload = function() { kakao.maps.load(function() { initMap(); }); };
+        document.addEventListener('DOMContentLoaded', function() { kakao.maps.load(function() { initMap(); }); });
 
         let searchTimeout;
 
