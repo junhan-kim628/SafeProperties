@@ -1,0 +1,18 @@
+# 환경변수 (비밀번호, API 키)
+.env
+*.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# 학습 데이터 (용량 큰 파일)
+python/ml_training_data.csv
+python/subway.csv
+
+# IDE
+.idea/
+.vscode/
