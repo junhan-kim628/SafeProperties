@@ -104,6 +104,24 @@
             word-break: keep-all;
         }
 
+        /* 경매 손실 시뮬레이터 */
+        .simulator-box { margin-top: 25px; background: #fff; border: 1px solid #eee; border-radius: 8px; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .simulator-title { font-size: 14px; font-weight: bold; color: #333; margin-bottom: 12px; }
+        .simulator-disclaimer { font-size: 11.5px; color: #c0392b; background: #fff3f3; border-left: 3px solid #e74c3c; padding: 8px 10px; border-radius: 4px; margin-bottom: 15px; line-height: 1.6; }
+        .sim-label { font-size: 12.5px; color: #555; margin-bottom: 6px; font-weight: 600; }
+        .sim-slider { width: 100%; accent-color: #3498db; cursor: pointer; margin-bottom: 4px; }
+        .sim-number-input { width: 100%; box-sizing: border-box; border: 1px solid #ddd; border-radius: 6px; padding: 8px 10px; font-size: 13px; margin-bottom: 15px; outline: none; transition: border-color 0.2s; }
+        .sim-number-input:focus { border-color: #3498db; }
+        .sim-result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+        .sim-card { background: #f8f9fa; border-radius: 8px; padding: 10px 12px; }
+        .sim-card-label { font-size: 11px; color: #7f8c8d; margin-bottom: 4px; }
+        .sim-card-value { font-size: 13px; font-weight: 900; color: #2c3e50; word-break: keep-all; }
+        .sim-bar-wrap { margin-top: 14px; }
+        .sim-bar-bg { width: 100%; height: 22px; background: #eee; border-radius: 6px; overflow: hidden; display: flex; }
+        .sim-bar-safe { height: 100%; background: #3498db; transition: width 0.35s ease; }
+        .sim-bar-loss { height: 100%; background: #e74c3c; transition: width 0.35s ease; }
+        .sim-bar-legend { display: flex; justify-content: space-between; font-size: 11px; color: #888; margin-top: 5px; }
+
         /* 스켈레톤 로딩 UI 스타일 */
         #loading { display: none; padding: 10px 0; }
         .skeleton-pulse {
@@ -223,6 +241,40 @@
                     <div class="chart-title">📈 연도별 매매가 vs 전세가 추이</div>
                     <canvas id="trendChart"></canvas>
                 </div>
+
+                <!-- 경매 손실 시뮬레이터 -->
+                <div class="simulator-box">
+                    <div class="simulator-title">🏛️ 경매 손실 시뮬레이터</div>
+                    <div class="simulator-disclaimer">
+                        ※ 기본값은 선순위 채권(근저당)이 없다고 가정합니다.<br>
+                        계약 전 반드시 <strong>등기부등본(을구)</strong>을 확인하고 아래에 입력하세요.
+                    </div>
+
+                    <div class="sim-label">📉 낙찰가율 &nbsp;<span id="sim-rate-val" style="color:#3498db; font-weight:900;">70%</span></div>
+                    <input type="range" class="sim-slider" id="sim-rate" min="50" max="100" value="70" oninput="updateSimulator()">
+                    <div style="display:flex; justify-content:space-between; font-size:11px; color:#bbb; margin-bottom:14px;"><span>50% (최악)</span><span>100% (온전)</span></div>
+
+                    <div class="sim-label">🏦 선순위 채권액 <span style="font-weight:400; color:#999;">(만원 단위)</span></div>
+                    <input type="number" class="sim-number-input" id="sim-lien" placeholder="0  ← 등기부등본 을구의 근저당 금액 입력" min="0" oninput="updateSimulator()">
+
+                    <div class="sim-result-grid">
+                        <div class="sim-card"><div class="sim-card-label">🏠 예상 낙찰가</div><div class="sim-card-value" id="sim-bid">-</div></div>
+                        <div class="sim-card"><div class="sim-card-label">🏦 선순위 채권</div><div class="sim-card-value" id="sim-lien-show">0원</div></div>
+                        <div class="sim-card"><div class="sim-card-label">💰 내 보증금</div><div class="sim-card-value" id="sim-deposit">-</div></div>
+                        <div class="sim-card"><div class="sim-card-label">💸 예상 손실액</div><div class="sim-card-value" id="sim-loss">-</div></div>
+                    </div>
+
+                    <div class="sim-bar-wrap">
+                        <div class="sim-bar-bg">
+                            <div class="sim-bar-safe" id="sim-bar-safe" style="width:100%;"></div>
+                            <div class="sim-bar-loss" id="sim-bar-loss" style="width:0%;"></div>
+                        </div>
+                        <div class="sim-bar-legend">
+                            <span style="color:#3498db;">■ 회수 가능 (<span id="sim-recover-pct">100</span>%)</span>
+                            <span style="color:#e74c3c;">■ 손실 예상 (<span id="sim-loss-pct">0</span>%)</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -236,6 +288,22 @@
         let myChart = null;
         let rvPreview, rvFull, rvClient;
         let currentPos = null;
+        let simSalePrice = 0, simDeposit = 0;  // 경매 시뮬레이터용
+
+        const formatMoney = (num) => {
+            if (!num || num === 0) return "0원";
+            let isNegative = num < 0;
+            let absNum = Math.abs(num);
+            let manWon = Math.round(absNum / 10000);
+            if (manWon === 0) return "0원";
+            let uk = Math.floor(manWon / 10000);
+            let man = manWon % 10000;
+            let result = "";
+            if (uk > 0) result += uk.toLocaleString() + "억 ";
+            if (man > 0) result += man.toLocaleString() + "만 ";
+            result += "원";
+            return (isNegative ? "-" : "") + result.trim();
+        };
 
         const clusterStyle = {
             width: '64px', height: '64px', background: 'rgba(52, 152, 219, 0.85)', borderRadius: '32px',
@@ -615,21 +683,6 @@
             document.getElementById('prob-2').innerText = data.probability['위험'] + '%';
             document.getElementById('bar-2').style.width = data.probability['위험'] + '%';
 
-            const formatMoney = (num) => {
-                if (!num || num === 0) return "0원";
-                let isNegative = num < 0;
-                let absNum = Math.abs(num);
-                let manWon = Math.round(absNum / 10000);
-                if (manWon === 0) return "0원";
-                let uk = Math.floor(manWon / 10000);
-                let man = manWon % 10000;
-                let result = "";
-                if (uk > 0) result += uk.toLocaleString() + "억 ";
-                if (man > 0) result += man.toLocaleString() + "만 ";
-                result += "원";
-                return (isNegative ? "-" : "") + result.trim();
-            };
-
             document.getElementById('feat-jeonse').innerText = formatMoney(f.avg_jeonse_deposit);
             document.getElementById('feat-sale').innerText = formatMoney(f.avg_sale_price);
             document.getElementById('feat-gap').innerText = formatMoney(f.gap_amount);
@@ -646,9 +699,50 @@
             }
             document.getElementById('feat-floor').innerText = f.floor ? `${Math.round(f.floor)}층` : "-";
             document.getElementById('feat-tx').innerText = f.total_tx_count ? `${f.total_tx_count.toLocaleString()}건` : "-";
+
+            // 경매 손실 시뮬레이터 초기화
+            simSalePrice = f.avg_sale_price || 0;
+            simDeposit = f.avg_jeonse_deposit || 0;
+            document.getElementById('sim-rate').value = 70;
+            document.getElementById('sim-lien').value = '';
+            updateSimulator();
         }
 
         function closePanel() { document.getElementById('side-panel').classList.remove('open'); }
+
+        function updateSimulator() {
+            const rate = parseInt(document.getElementById('sim-rate').value) / 100;
+            const lienManWon = parseFloat(document.getElementById('sim-lien').value) || 0;
+            const lien = lienManWon * 10000;
+
+            document.getElementById('sim-rate-val').innerText = Math.round(rate * 100) + '%';
+
+            const bidPrice = simSalePrice * rate;
+            const remainAfterLien = Math.max(0, bidPrice - lien);
+            const recover = Math.min(simDeposit, remainAfterLien);
+            const loss = Math.max(0, simDeposit - recover);
+            const recoverPct = simDeposit > 0 ? Math.round((recover / simDeposit) * 100) : 100;
+            const lossPct = 100 - recoverPct;
+
+            document.getElementById('sim-bid').innerText = formatMoney(bidPrice);
+            document.getElementById('sim-lien-show').innerText = formatMoney(lien);
+            document.getElementById('sim-deposit').innerText = formatMoney(simDeposit);
+
+            const lossEl = document.getElementById('sim-loss');
+            if (loss === 0) {
+                lossEl.innerText = '손실 없음 ✅';
+                lossEl.style.color = '#27ae60';
+            } else {
+                lossEl.innerText = '- ' + formatMoney(loss);
+                lossEl.style.color = '#e74c3c';
+            }
+
+            document.getElementById('sim-bar-safe').style.width = recoverPct + '%';
+            document.getElementById('sim-bar-loss').style.width = lossPct + '%';
+            document.getElementById('sim-recover-pct').innerText = recoverPct;
+            document.getElementById('sim-loss-pct').innerText = lossPct;
+        }
+
         document.addEventListener('DOMContentLoaded', function() { kakao.maps.load(function() { initMap(); }); });
 
         let searchTimeout;
