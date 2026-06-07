@@ -190,13 +190,13 @@
         #district-stats-btn.active { background: rgba(235,245,251,0.95); border-color: #3498db; color: #2980b9; }
 
         #district-panel {
-            display: none;
             position: absolute; top: 195px; left: 20px; z-index: 2;
             width: 340px; max-height: calc(100vh - 220px);
             background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(255,255,255,0.5); border-radius: 12px;
             box-shadow: 0 6px 20px rgba(0,0,0,0.15); overflow: hidden;
-            display: flex; flex-direction: column;
+            flex-direction: column;
+            /* display는 JS에서 'none'/'flex'로 토글 — CSS 여기서 중복 선언 제거 */
         }
         .dp-header {
             display: flex; align-items: center; justify-content: space-between;
@@ -272,8 +272,8 @@
     <!-- 구별 통계 토글 버튼 -->
     <button id="district-stats-btn" onclick="toggleDistrictPanel()">📊 구별 위험도 통계</button>
 
-    <!-- 구별 위험도 통계 패널 -->
-    <div id="district-panel">
+    <!-- 구별 위험도 통계 패널 (초기 숨김 — toggleDistrictPanel에서 'flex'로 전환) -->
+    <div id="district-panel" style="display:none;">
         <div class="dp-header">
             <span class="dp-header-title">📊 서울 구별 위험 매물 현황</span>
             <button class="dp-close" onclick="toggleDistrictPanel()">×</button>
@@ -369,7 +369,7 @@
                 <div class="grid-container">
                     <div class="info-card"><div class="info-label">💰 평균 전세가</div><div class="info-value" id="feat-jeonse">0원</div></div>
                     <div class="info-card"><div class="info-label">🏠 평균 매매가</div><div class="info-value" id="feat-sale">0원</div></div>
-                    <div class="info-card"><div class="info-label">📉 전세가율</div><div class="info-value" id="feat-gap" style="color:#e74c3c;">0원</div></div>
+                    <div class="info-card"><div class="info-label">📉 갭 금액</div><div class="info-value" id="feat-gap" style="color:#e74c3c;">0원</div></div>
                     <div class="info-card"><div class="info-label">📊 유사 매물 대비</div><div class="info-value" id="feat-dev">0%</div></div>
                     <div class="info-card"><div class="info-label">🚇 역세권 여부</div><div class="info-value" id="feat-station">-</div></div>
                     <div class="info-card"><div class="info-label">⏳ 건물 노후도</div><div class="info-value" id="feat-age">0년</div></div>
@@ -607,8 +607,7 @@
                         });
                     });
 
-                    // 지도 중심 먼저 설정 (마커 없이도 지도가 뜨도록)
-                    if(data.data.length > 0) map.setCenter(new kakao.maps.LatLng(data.data[0].lat, data.data[0].lon));
+                    // 지도 중심은 initMap에서 서울 중심으로 이미 설정됨 — 여기서 재설정 불필요
 
                     // ② [C안] 청크 단위 비동기 마커 생성 — UI 블로킹 방지
                     const CHUNK = 1000;

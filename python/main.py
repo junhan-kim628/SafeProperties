@@ -37,10 +37,8 @@ DB_PARAMS = {
 }
 
 # 국토부 건축물대장 API
-BUILDING_API_KEY = os.getenv(
-    "BUILDING_API_KEY",
-    "1yxixfObrK/iZ+cdWrx0xzZA8aIl5mifDFcE6rR9yEubodK1qo7WP+zvQbjprnEkBzq/EsVAvv8LbUD9EOCB7g=="
-)
+# 키는 반드시 .env의 BUILDING_API_KEY에 설정 — 코드에 직접 쓰지 말 것
+BUILDING_API_KEY = os.getenv("BUILDING_API_KEY", "")
 BUILDING_API_URL = "http://apis.data.go.kr/1613000/BldRgstService_v2/getBrTitleInfo"
 
 # AI 모델 로드
@@ -315,16 +313,18 @@ def search_buildings(keyword: str = ""):
         cursor = conn.cursor()
 
         # 건물명·주소 검색 + house_analysis_data JOIN으로 위험도(risk_label) 함께 반환
+        # LIKE 와일드카드 문자('%', '_', '\')를 이스케이프하여 의도치 않은 전체 검색 방지
+        escaped = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         query = """
             SELECT h.house_id, h.building_name, h.jibun_address,
                    ST_X(h.geom) as lon, ST_Y(h.geom) as lat,
                    a.risk_label
             FROM houses h
             LEFT JOIN house_analysis_data a ON h.house_id = a.house_id
-            WHERE h.building_name LIKE %s OR h.jibun_address LIKE %s
+            WHERE h.building_name LIKE %s ESCAPE '\\' OR h.jibun_address LIKE %s ESCAPE '\\'
             LIMIT 10;
         """
-        search_term = f"%{keyword}%"
+        search_term = f"%{escaped}%"
         cursor.execute(query, (search_term, search_term))
         rows = cursor.fetchall()
 
@@ -347,7 +347,7 @@ def search_buildings(keyword: str = ""):
             conn.close()
 
 # ==========================================
-# 📊 API 5: 서울 구별 위험도 통계
+# 📊 API 6: 서울 구별 위험도 통계
 # ==========================================
 # 서울 25개 구 법정동 코드(앞 5자리) → 구 이름 매핑
 DISTRICT_NAMES = {
