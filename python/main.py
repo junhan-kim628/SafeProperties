@@ -86,57 +86,56 @@ def serve_frontend():
     except FileNotFoundError:
         return "<h1>index.html 파일을 찾을 수 없습니다. 파일 위치를 확인해주세요.</h1>"
 
+# [E안] 마커 응답 서버 캐시 — 데이터가 거의 변하지 않으므로 최초 1회만 DB 조회
+_markers_cache = None
+
 # ==========================================
 # 📍 API 1: 지도 마커 데이터 가져오기 (전세 가격 포함)
 # ==========================================
 @app.get("/api/markers")
 def get_map_markers(limit: int = 50000):
+    global _markers_cache
+
+    # [E안] 캐시 히트 시 즉시 반환 (DB·예측 완전 생략)
+    if _markers_cache is not None:
+        print("✅ 마커 캐시 히트 — DB 조회 생략")
+        return _markers_cache
+
     conn = None
     try:
         conn = psycopg2.connect(**DB_PARAMS)
         cursor = conn.cursor()
 
-        # region_code(구) 기준으로 균등 샘플링하여 특정 지역이 누락되지 않도록 함
+        # [A안] risk_label을 DB에서 직접 읽어 XGBoost 예측 생략 → 서버 처리 시간 단축
         query = """
             SELECT h.house_id, h.building_name, h.jibun_address,
                    ST_X(h.geom) AS lon, ST_Y(h.geom) AS lat,
-                   a.building_type_code, a.build_age, a.exclusive_area, a.floor,
-                   a.dist_to_subway, a.is_station_area, a.avg_sale_price,
-                   a.avg_jeonse_deposit, a.gap_amount, a.total_tx_count,
-                   a.group_avg_jeonse_rate, a.jeonse_rate_deviation
+                   a.risk_label,
+                   a.avg_jeonse_deposit
             FROM houses h
             JOIN house_analysis_data a ON h.house_id = a.house_id
             WHERE h.geom IS NOT NULL
-            ORDER BY h.region_code, h.house_id
             LIMIT %s;
         """
         cursor.execute(query, (limit,))
         rows = cursor.fetchall()
 
-        features = ['building_type_code', 'build_age', 'exclusive_area', 'floor', 'dist_to_subway', 'is_station_area',
-                    'avg_sale_price', 'avg_jeonse_deposit', 'gap_amount', 'total_tx_count', 'group_avg_jeonse_rate',
-                    'jeonse_rate_deviation']
-        col_names = ['house_id', 'building_name', 'address', 'lon', 'lat'] + features
-
-        # 배치 예측: 1건씩 반복 호출 대신 전체를 한 번에 처리 (속도 대폭 향상)
-        row_dicts = [dict(zip(col_names, r)) for r in rows]
-        X_batch = pd.DataFrame([{f: rd[f] for f in features} for rd in row_dicts])
-        preds = model.predict(X_batch).tolist()
-
         markers = [
             {
-                "house_id": rd['house_id'],
-                "building_name": rd['building_name'],
-                "address": rd['address'],
-                "lon": rd['lon'],
-                "lat": rd['lat'],
-                "risk": int(pred),
-                "jeonse": float(rd['avg_jeonse_deposit']) if rd['avg_jeonse_deposit'] else 0,
+                "house_id": r[0],
+                "building_name": r[1],
+                "address": r[2],
+                "lon": r[3],
+                "lat": r[4],
+                "risk": int(r[5]) if r[5] is not None else 0,
+                "jeonse": float(r[6]) if r[6] else 0,
             }
-            for rd, pred in zip(row_dicts, preds)
+            for r in rows
         ]
 
-        return {"status": "success", "data": markers}
+        _markers_cache = {"status": "success", "data": markers}
+        print(f"✅ 마커 {len(markers):,}건 캐시 저장 완료")
+        return _markers_cache
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:

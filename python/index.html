@@ -379,7 +379,8 @@
                     allMarkers = [];
                     allOverlays = [];
 
-                    // 위치별 그룹화
+                    // ① 위치별 그룹화 + 오프셋 계산 (동기 처리, 빠름)
+                    const RADIUS = 0.00015;
                     let locationGroup = {};
                     data.data.forEach(house => {
                         let key = `${house.lat}_${house.lon}`;
@@ -387,28 +388,47 @@
                         locationGroup[key].push(house);
                     });
 
-                    const RADIUS = 0.00015;
-
+                    // 평탄화: [{house, finalLat, finalLon}, ...]
+                    const items = [];
                     Object.values(locationGroup).forEach(group => {
                         let count = group.length;
                         group.forEach((house, index) => {
-                            let finalLat = house.lat; let finalLon = house.lon;
+                            let finalLat = house.lat, finalLon = house.lon;
                             if (count > 1) {
                                 let angle = (Math.PI * 2 * index) / count;
                                 finalLat += RADIUS * Math.cos(angle);
                                 finalLon += RADIUS * Math.sin(angle);
                             }
-                            var markerPosition = new kakao.maps.LatLng(finalLat, finalLon);
+                            items.push({ house, finalLat, finalLon });
+                        });
+                    });
+
+                    // 지도 중심 먼저 설정 (마커 없이도 지도가 뜨도록)
+                    if(data.data.length > 0) map.setCenter(new kakao.maps.LatLng(data.data[0].lat, data.data[0].lon));
+
+                    // ② [C안] 청크 단위 비동기 마커 생성 — UI 블로킹 방지
+                    const CHUNK = 1000;
+                    const total = items.length;
+                    let chunkStart = 0;
+
+                    function processChunk() {
+                        const end = Math.min(chunkStart + CHUNK, total);
+                        const chunkMarkers = [];
+
+                        for (let i = chunkStart; i < end; i++) {
+                            const { house, finalLat, finalLon } = items[i];
+                            const markerPosition = new kakao.maps.LatLng(finalLat, finalLon);
 
                             let iconUrl = "https://maps.google.com/mapfiles/ms/icons/green-dot.png";
                             if(house.risk === 1) iconUrl = "https://maps.google.com/mapfiles/ms/icons/orange-dot.png";
                             if(house.risk === 2) iconUrl = "https://maps.google.com/mapfiles/ms/icons/red-dot.png";
 
-                            var markerImage = new kakao.maps.MarkerImage(iconUrl, new kakao.maps.Size(32, 32));
-                            var marker = new kakao.maps.Marker({ position: markerPosition, image: markerImage, clickable: true, zIndex: 1 });
+                            const markerImage = new kakao.maps.MarkerImage(iconUrl, new kakao.maps.Size(32, 32));
+                            const marker = new kakao.maps.Marker({ position: markerPosition, image: markerImage, clickable: true, zIndex: 1 });
                             marker.risk = house.risk;
                             kakao.maps.event.addListener(marker, 'click', function() { openPanel(house); });
                             allMarkers.push(marker);
+                            chunkMarkers.push(marker);
 
                             let bldgName = house.building_name || "이름 없는 주택";
                             let priceText = formatShortMoney(house.jeonse || 0);
@@ -429,21 +449,30 @@
                             overlayDiv.appendChild(mapLabel);
                             overlayDiv.onclick = function() { openPanel(house); };
 
-                            let customOverlay = new kakao.maps.CustomOverlay({ position: markerPosition, content: overlayDiv, yAnchor: -0.2, zIndex: 1, clickable: true });
+                            const customOverlay = new kakao.maps.CustomOverlay({ position: markerPosition, content: overlayDiv, yAnchor: -0.2, zIndex: 1, clickable: true });
                             customOverlay.risk = house.risk;
                             allOverlays.push(customOverlay);
 
                             overlayDiv.onmouseover = function() { marker.setZIndex(999); customOverlay.setZIndex(999); };
                             overlayDiv.onmouseout = function() { marker.setZIndex(1); customOverlay.setZIndex(1); if (map.getLevel() > 5) customOverlay.setMap(null); };
-
                             kakao.maps.event.addListener(marker, 'mouseover', function() { marker.setZIndex(999); customOverlay.setZIndex(999); customOverlay.setMap(map); });
                             kakao.maps.event.addListener(marker, 'mouseout', function() { marker.setZIndex(1); customOverlay.setZIndex(1); if (map.getLevel() > 5) customOverlay.setMap(null); });
-                        });
-                    });
+                        }
 
-                    clusterer.addMarkers(allMarkers);
-                    if(data.data.length > 0) map.setCenter(new kakao.maps.LatLng(data.data[0].lat, data.data[0].lon));
-                    updateOverlaysVisibility();
+                        // 이번 청크 마커를 클러스터러에 즉시 추가 (점진적 표시)
+                        clusterer.addMarkers(chunkMarkers);
+                        chunkStart = end;
+
+                        if (chunkStart < total) {
+                            // 다음 청크를 이벤트 루프에 양보 후 실행
+                            setTimeout(processChunk, 0);
+                        } else {
+                            // 모든 청크 완료 → 오버레이 표시 갱신
+                            updateOverlaysVisibility();
+                        }
+                    }
+
+                    processChunk(); // 첫 번째 청크 즉시 시작
 
                     // 디바운스: 줌/이동 중 중복 호출 방지 (완료 후 150ms 뒤 1회만 실행)
                     let overlayTimer;
