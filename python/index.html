@@ -157,6 +157,44 @@
         .skel-title { width: 120px; height: 16px; margin-bottom: 15px; }
         .skel-card { height: 75px; }
 
+        /* 구별 위험도 통계 패널 */
+        #district-stats-btn {
+            position: absolute; top: 148px; left: 20px; z-index: 2;
+            padding: 9px 14px; border-radius: 8px; border: 1px solid rgba(200,200,200,0.5);
+            background: rgba(255,255,255,0.85); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12); font-size: 13px; font-weight: 700;
+            cursor: pointer; transition: all 0.2s; color: #2c3e50;
+        }
+        #district-stats-btn:hover { background: rgba(235,245,251,0.95); border-color: #3498db; color: #2980b9; }
+        #district-stats-btn.active { background: rgba(235,245,251,0.95); border-color: #3498db; color: #2980b9; }
+
+        #district-panel {
+            display: none;
+            position: absolute; top: 195px; left: 20px; z-index: 2;
+            width: 340px; max-height: calc(100vh - 220px);
+            background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.5); border-radius: 12px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15); overflow: hidden;
+            display: flex; flex-direction: column;
+        }
+        .dp-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 16px 10px; border-bottom: 1px solid #f0f0f0; flex-shrink: 0;
+        }
+        .dp-header-title { font-size: 14px; font-weight: 800; color: #2c3e50; }
+        .dp-close { background: none; border: none; font-size: 20px; cursor: pointer; color: #999; line-height: 1; padding: 0; }
+        .dp-close:hover { color: #555; }
+        .dp-summary {
+            padding: 8px 16px; font-size: 11.5px; color: #666;
+            background: #f8f9fa; border-bottom: 1px solid #f0f0f0; flex-shrink: 0;
+        }
+        .dp-legend {
+            display: flex; gap: 12px; padding: 8px 16px 4px; flex-shrink: 0;
+        }
+        .dp-legend-item { display: flex; align-items: center; gap: 4px; font-size: 11px; color: #666; }
+        .dp-legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+        .dp-chart-wrap { flex: 1; overflow-y: auto; padding: 8px 12px 12px; }
+
         /* 마커 로딩 프로그레스 바 */
         #map-loading {
             position: absolute; bottom: 36px; left: 50%; transform: translateX(-50%);
@@ -208,6 +246,26 @@
         <button class="filter-btn" onclick="filterMarkers(0, this)">✅ 적정 매물</button>
         <button class="filter-btn" onclick="filterMarkers(1, this)">⚠️ 주의 매물</button>
         <button class="filter-btn" onclick="filterMarkers(2, this)">🚨 위험 매물</button>
+    </div>
+
+    <!-- 구별 통계 토글 버튼 -->
+    <button id="district-stats-btn" onclick="toggleDistrictPanel()">📊 구별 위험도 통계</button>
+
+    <!-- 구별 위험도 통계 패널 -->
+    <div id="district-panel">
+        <div class="dp-header">
+            <span class="dp-header-title">📊 서울 구별 위험 매물 현황</span>
+            <button class="dp-close" onclick="toggleDistrictPanel()">×</button>
+        </div>
+        <div class="dp-summary" id="dp-summary">위험 매물 비율 기준 정렬</div>
+        <div class="dp-legend">
+            <div class="dp-legend-item"><div class="dp-legend-dot" style="background:#e74c3c;"></div>위험</div>
+            <div class="dp-legend-item"><div class="dp-legend-dot" style="background:#f39c12;"></div>주의</div>
+            <div class="dp-legend-item"><div class="dp-legend-dot" style="background:#27ae60;"></div>적정</div>
+        </div>
+        <div class="dp-chart-wrap">
+            <canvas id="districtChart"></canvas>
+        </div>
     </div>
 
     <div id="map"></div>
@@ -989,6 +1047,119 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() { kakao.maps.load(function() { initMap(); }); });
+
+        // ── 구별 위험도 통계 패널 ─────────────────────────────────────
+        let districtChartObj = null;
+        let districtDataCache = null;
+        let districtPanelOpen = false;
+
+        async function toggleDistrictPanel() {
+            const panel = document.getElementById('district-panel');
+            const btn   = document.getElementById('district-stats-btn');
+            districtPanelOpen = !districtPanelOpen;
+
+            if (!districtPanelOpen) {
+                panel.style.display = 'none';
+                btn.classList.remove('active');
+                return;
+            }
+
+            panel.style.display = 'flex';
+            btn.classList.add('active');
+
+            // 최초 1회만 API 호출
+            if (!districtDataCache) {
+                document.getElementById('dp-summary').textContent = '데이터 불러오는 중...';
+                try {
+                    const res  = await fetch(`${API_BASE_URL}/api/district-stats`);
+                    const json = await res.json();
+                    districtDataCache = json.data;
+                } catch(e) {
+                    document.getElementById('dp-summary').textContent = '데이터 로드 실패';
+                    return;
+                }
+            }
+            renderDistrictChart(districtDataCache);
+        }
+
+        function renderDistrictChart(data) {
+            // 전체 합계로 서울 요약 계산
+            const totalAll   = data.reduce((s, d) => s + d.total, 0);
+            const dangerAll  = data.reduce((s, d) => s + d.danger_count, 0);
+            const warnAll    = data.reduce((s, d) => s + d.warn_count, 0);
+            const okAll      = data.reduce((s, d) => s + d.ok_count, 0);
+            document.getElementById('dp-summary').textContent =
+                `서울 전체 ${totalAll.toLocaleString()}건 | ` +
+                `위험 ${(dangerAll/totalAll*100).toFixed(1)}% · ` +
+                `주의 ${(warnAll/totalAll*100).toFixed(1)}% · ` +
+                `적정 ${(okAll/totalAll*100).toFixed(1)}%`;
+
+            if (districtChartObj) districtChartObj.destroy();
+
+            const ctx = document.getElementById('districtChart').getContext('2d');
+            // 캔버스 높이: 구 수 × 22px
+            document.getElementById('districtChart').style.height = (data.length * 22 + 40) + 'px';
+
+            districtChartObj = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.map(d => d.district_name),
+                    datasets: [
+                        {
+                            label: '위험',
+                            data: data.map(d => d.danger_pct),
+                            backgroundColor: '#e74c3c',
+                            borderWidth: 0,
+                        },
+                        {
+                            label: '주의',
+                            data: data.map(d => d.warn_pct),
+                            backgroundColor: '#f39c12',
+                            borderWidth: 0,
+                        },
+                        {
+                            label: '적정',
+                            data: data.map(d => d.ok_pct),
+                            backgroundColor: '#27ae60',
+                            borderWidth: 0,
+                        },
+                    ]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                title: (items) => {
+                                    const d = data[items[0].dataIndex];
+                                    return `${d.district_name} (총 ${d.total.toLocaleString()}건)`;
+                                },
+                                label: (item) => {
+                                    const d = data[item.dataIndex];
+                                    const counts = [d.danger_count, d.warn_count, d.ok_count];
+                                    return ` ${item.dataset.label}: ${item.parsed.x.toFixed(1)}% (${counts[item.datasetIndex].toLocaleString()}건)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true, max: 100, min: 0,
+                            ticks: { font: { size: 10 }, callback: v => v + '%' },
+                            grid: { color: 'rgba(0,0,0,0.05)' }
+                        },
+                        y: {
+                            stacked: true,
+                            ticks: { font: { size: 11 } }
+                        }
+                    }
+                }
+            });
+        }
+        // ────────────────────────────────────────────────────────────────
 
         let searchTimeout;
 

@@ -297,7 +297,74 @@ def search_buildings(keyword: str = ""):
             conn.close()
 
 # ==========================================
-# 🏛️ API 5: 국토부 건축물대장 API 중계
+# 📊 API 5: 서울 구별 위험도 통계
+# ==========================================
+# 서울 25개 구 법정동 코드(앞 5자리) → 구 이름 매핑
+DISTRICT_NAMES = {
+    "11110": "종로구",  "11140": "중구",    "11170": "용산구",
+    "11200": "성동구",  "11215": "광진구",  "11230": "동대문구",
+    "11260": "중랑구",  "11290": "성북구",  "11305": "강북구",
+    "11320": "도봉구",  "11350": "노원구",  "11380": "은평구",
+    "11410": "서대문구","11440": "마포구",  "11470": "양천구",
+    "11500": "강서구",  "11530": "구로구",  "11545": "금천구",
+    "11560": "영등포구","11590": "동작구",  "11620": "관악구",
+    "11650": "서초구",  "11680": "강남구",  "11710": "송파구",
+    "11740": "강동구",
+}
+
+_district_cache = None  # 자주 바뀌지 않으므로 캐시
+
+@app.get("/api/district-stats")
+def get_district_stats():
+    global _district_cache
+    if _district_cache is not None:
+        return _district_cache
+
+    conn = None
+    try:
+        conn = psycopg2.connect(**DB_PARAMS)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT
+                h.region_code,
+                COUNT(*)                                              AS total,
+                COUNT(CASE WHEN a.risk_label = 0 THEN 1 END)         AS ok_count,
+                COUNT(CASE WHEN a.risk_label = 1 THEN 1 END)         AS warn_count,
+                COUNT(CASE WHEN a.risk_label = 2 THEN 1 END)         AS danger_count
+            FROM houses h
+            JOIN house_analysis_data a ON h.house_id = a.house_id
+            WHERE h.geom IS NOT NULL
+            GROUP BY h.region_code
+            ORDER BY danger_count DESC;
+        """)
+        rows = cursor.fetchall()
+
+        data = []
+        for r in rows:
+            code  = str(r[0])
+            total = r[1] or 1  # 0 나누기 방지
+            data.append({
+                "region_code":   code,
+                "district_name": DISTRICT_NAMES.get(code, code),
+                "total":         r[1],
+                "ok_count":      r[2],
+                "warn_count":    r[3],
+                "danger_count":  r[4],
+                "ok_pct":        round(r[2] / total * 100, 1),
+                "warn_pct":      round(r[3] / total * 100, 1),
+                "danger_pct":    round(r[4] / total * 100, 1),
+            })
+
+        _district_cache = {"status": "success", "data": data}
+        return _district_cache
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if conn:
+            conn.close()
+
+# ==========================================
+# 🏛️ API 6: 국토부 건축물대장 API 중계
 # ==========================================
 @app.get("/api/building-info")
 def get_building_info(sigungu_cd: str = "", bjdong_cd: str = "", bun: str = "0", ji: str = "0"):
