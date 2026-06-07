@@ -104,12 +104,19 @@ def get_map_markers(limit: int = 50000):
         conn = psycopg2.connect(**DB_PARAMS)
         cursor = conn.cursor()
 
-        # [A안] risk_label을 DB에서 직접 읽어 XGBoost 예측 생략 → 서버 처리 시간 단축
-        query = """
+        # 마커 색상과 패널 AI 판별을 동일한 XGBoost 모델로 통일
+        # 배치 예측(33K건 일괄)은 < 1초, 캐시에 저장되므로 최초 1회만 실행
+        feat_cols = ['building_type_code', 'build_age', 'exclusive_area', 'floor',
+                     'dist_to_subway', 'is_station_area', 'avg_sale_price',
+                     'avg_jeonse_deposit', 'gap_amount', 'total_tx_count',
+                     'group_avg_jeonse_rate', 'jeonse_rate_deviation']
+        jeonse_idx = feat_cols.index('avg_jeonse_deposit')  # = 7
+
+        feat_select = ', '.join(f'a.{c}' for c in feat_cols)
+        query = f"""
             SELECT h.house_id, h.building_name, h.jibun_address,
                    ST_X(h.geom) AS lon, ST_Y(h.geom) AS lat,
-                   a.risk_label,
-                   a.avg_jeonse_deposit
+                   {feat_select}
             FROM houses h
             JOIN house_analysis_data a ON h.house_id = a.house_id
             WHERE h.geom IS NOT NULL
@@ -118,6 +125,10 @@ def get_map_markers(limit: int = 50000):
         cursor.execute(query, (limit,))
         rows = cursor.fetchall()
 
+        # 배치 XGBoost 예측
+        X = pd.DataFrame([r[5:] for r in rows], columns=feat_cols)
+        predictions = model.predict(X)
+
         markers = [
             {
                 "house_id": r[0],
@@ -125,14 +136,14 @@ def get_map_markers(limit: int = 50000):
                 "address": r[2],
                 "lon": r[3],
                 "lat": r[4],
-                "risk": int(r[5]) if r[5] is not None else 0,
-                "jeonse": float(r[6]) if r[6] else 0,
+                "risk": int(predictions[i]),
+                "jeonse": float(r[5 + jeonse_idx]) if r[5 + jeonse_idx] else 0,
             }
-            for r in rows
+            for i, r in enumerate(rows)
         ]
 
         _markers_cache = {"status": "success", "data": markers}
-        print(f"✅ 마커 {len(markers):,}건 캐시 저장 완료")
+        print(f"✅ 마커 {len(markers):,}건 XGBoost 배치 예측 완료 후 캐시 저장")
         return _markers_cache
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
