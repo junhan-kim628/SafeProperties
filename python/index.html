@@ -157,6 +157,27 @@
         .skel-title { width: 120px; height: 16px; margin-bottom: 15px; }
         .skel-card { height: 75px; }
 
+        /* 실거래 이력 테이블 */
+        .tx-section { margin-top: 25px; background:#fff; border:1px solid #eee; border-radius:8px; padding:15px; box-shadow:0 2px 8px rgba(0,0,0,0.05); }
+        .tx-section-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+        .tx-section-title { font-size:14px; font-weight:bold; color:#333; }
+        .tx-total-badge { font-size:11px; color:#7f8c8d; background:#f0f4f8; padding:3px 8px; border-radius:10px; }
+        .tx-filter-tabs { display:flex; gap:6px; margin-bottom:10px; }
+        .tx-tab { padding:4px 10px; border-radius:12px; border:1px solid #ddd; background:#fff; font-size:11.5px; cursor:pointer; color:#555; transition:all 0.15s; }
+        .tx-tab.active { background:#2c3e50; color:#fff; border-color:#2c3e50; }
+        .tx-table-wrap { overflow-x:auto; max-height:240px; overflow-y:auto; border-radius:6px; border:1px solid #f0f0f0; }
+        .tx-table { width:100%; border-collapse:collapse; font-size:12px; }
+        .tx-table thead th { position:sticky; top:0; background:#f8f9fa; padding:7px 10px; text-align:left; font-weight:700; color:#555; border-bottom:2px solid #e9ecef; white-space:nowrap; }
+        .tx-table tbody tr { border-bottom:1px solid #f5f5f5; transition:background 0.1s; }
+        .tx-table tbody tr:hover { background:#f8f9fa; }
+        .tx-table tbody tr:last-child { border-bottom:none; }
+        .tx-table td { padding:7px 10px; color:#333; white-space:nowrap; }
+        .tx-type-badge { display:inline-block; padding:2px 7px; border-radius:8px; font-size:11px; font-weight:700; color:#fff; }
+        .tx-type-매매 { background:#3498db; }
+        .tx-type-전세 { background:#8e44ad; }
+        .tx-type-월세 { background:#27ae60; }
+        .tx-empty { text-align:center; padding:20px; color:#aaa; font-size:13px; }
+
         /* 구별 위험도 통계 패널 */
         #district-stats-btn {
             position: absolute; top: 148px; left: 20px; z-index: 2;
@@ -371,6 +392,34 @@
                 <div class="chart-container">
                     <div class="chart-title">📈 연도별 매매가 vs 전세가 추이</div>
                     <canvas id="trendChart"></canvas>
+                </div>
+
+                <!-- 실거래 이력 테이블 -->
+                <div class="tx-section">
+                    <div class="tx-section-header">
+                        <span class="tx-section-title">📋 실거래 이력</span>
+                        <span class="tx-total-badge" id="tx-total-badge">로딩 중...</span>
+                    </div>
+                    <div class="tx-filter-tabs">
+                        <button class="tx-tab active" onclick="filterTx('전체', this)">전체</button>
+                        <button class="tx-tab" onclick="filterTx('매매', this)">매매</button>
+                        <button class="tx-tab" onclick="filterTx('전세', this)">전세</button>
+                        <button class="tx-tab" onclick="filterTx('월세', this)">월세</button>
+                    </div>
+                    <div class="tx-table-wrap">
+                        <table class="tx-table">
+                            <thead>
+                                <tr>
+                                    <th>거래일</th>
+                                    <th>유형</th>
+                                    <th>금액</th>
+                                    <th>면적</th>
+                                    <th>층</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tx-tbody"></tbody>
+                        </table>
+                    </div>
                 </div>
 
                 <!-- 경매 손실 시뮬레이터 -->
@@ -676,6 +725,70 @@
             updateOverlaysVisibility();
         }
 
+        // ── 실거래 이력 테이블 ───────────────────────────────────────────
+        let txAllData = [];   // 전체 데이터 보관 (탭 필터용)
+
+        function formatTxPrice(record) {
+            if (record.deal_type === '월세') {
+                const dep = record.price ? formatShortMoney(record.price) : '0';
+                const rent = record.monthly_rent ? formatShortMoney(record.monthly_rent) : '0';
+                return `보증 ${dep} / 월 ${rent}`;
+            }
+            return record.price ? formatMoney(record.price) : '-';
+        }
+
+        function renderTxTable(data) {
+            const tbody = document.getElementById('tx-tbody');
+            tbody.innerHTML = '';
+
+            if (!data || data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="tx-empty">거래 이력이 없습니다.</td></tr>`;
+                return;
+            }
+
+            data.forEach(r => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${r.deal_date}</td>
+                    <td><span class="tx-type-badge tx-type-${r.deal_type}">${r.deal_type}</span></td>
+                    <td>${formatTxPrice(r)}</td>
+                    <td>${r.area ? r.area + '㎡' : '-'}</td>
+                    <td>${r.floor ? r.floor + '층' : '-'}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function filterTx(type, btnEl) {
+            document.querySelectorAll('.tx-tab').forEach(b => b.classList.remove('active'));
+            btnEl.classList.add('active');
+            const filtered = type === '전체' ? txAllData : txAllData.filter(r => r.deal_type === type);
+            renderTxTable(filtered);
+        }
+
+        async function loadTransactions(houseId) {
+            document.getElementById('tx-total-badge').textContent = '로딩 중...';
+            document.getElementById('tx-tbody').innerHTML =
+                `<tr><td colspan="5" class="tx-empty">불러오는 중...</td></tr>`;
+            // 탭 전체로 초기화
+            document.querySelectorAll('.tx-tab').forEach(b => b.classList.remove('active'));
+            document.querySelector('.tx-tab').classList.add('active');
+
+            try {
+                const res  = await fetch(`${API_BASE_URL}/api/transactions/${houseId}`);
+                const json = await res.json();
+                if (json.status === 'success') {
+                    txAllData = json.data;
+                    document.getElementById('tx-total-badge').textContent = `총 ${json.total}건`;
+                    renderTxTable(txAllData);
+                }
+            } catch(e) {
+                document.getElementById('tx-tbody').innerHTML =
+                    `<tr><td colspan="5" class="tx-empty">데이터를 불러올 수 없습니다.</td></tr>`;
+            }
+        }
+        // ────────────────────────────────────────────────────────────────
+
         // 차트 그리기 함수 (실제 연도별 거래 데이터 사용)
         function drawTrendChart(trendData, fallback) {
             const ctx = document.getElementById('trendChart').getContext('2d');
@@ -817,6 +930,9 @@
                     setErrorUI("주소 인식 불가");
                 }
             });
+
+            // 실거래 이력 테이블 비동기 로드 (예측과 독립 실행)
+            loadTransactions(house.house_id);
 
             // AI 예측 + 연도별 추이 병렬 로드
             try {

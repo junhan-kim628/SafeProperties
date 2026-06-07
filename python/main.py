@@ -251,7 +251,57 @@ def get_price_trend(house_id: int):
             conn.close()
 
 # ==========================================
-# 🔍 API 4: 건물명 및 주소 검색 (자동완성용)
+# 📋 API 4: 실거래 이력 테이블 조회
+# ==========================================
+@app.get("/api/transactions/{house_id}")
+def get_transactions(house_id: int):
+    conn = None
+    try:
+        conn = psycopg2.connect(**DB_PARAMS)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT deal_date, deal_type, deal_amount, deposit, monthly_rent,
+                   exclusive_area, floor
+            FROM transactions
+            WHERE house_id = %s
+            ORDER BY deal_date DESC
+            LIMIT 50;
+        """, (house_id,))
+        rows = cursor.fetchall()
+
+        records = []
+        for r in rows:
+            deal_date, deal_type, deal_amount, deposit, monthly_rent, area, floor = r
+            # 거래 유형별 금액 표현
+            if deal_type == "매매":
+                price = int(deal_amount) if deal_amount else None
+                price_label = "매매가"
+            elif deal_type == "전세":
+                price = int(deposit) if deposit else None
+                price_label = "보증금"
+            else:  # 월세
+                price = int(deposit) if deposit else None
+                price_label = "보증금"
+
+            records.append({
+                "deal_date":   str(deal_date),
+                "deal_type":   deal_type,
+                "price":       price,
+                "price_label": price_label,
+                "monthly_rent": int(monthly_rent) if monthly_rent else None,
+                "area":        round(float(area), 1) if area else None,
+                "floor":       int(floor) if floor else None,
+            })
+
+        return {"status": "success", "data": records, "total": len(records)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if conn:
+            conn.close()
+
+# ==========================================
+# 🔍 API 5: 건물명 및 주소 검색 (자동완성용)
 # ==========================================
 @app.get("/api/search")
 def search_buildings(keyword: str = ""):
