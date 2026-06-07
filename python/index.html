@@ -693,9 +693,9 @@
                             allOverlays.push(customOverlay);
 
                             overlayDiv.onmouseover = function() { marker.setZIndex(999); customOverlay.setZIndex(999); };
-                            overlayDiv.onmouseout = function() { marker.setZIndex(1); customOverlay.setZIndex(1); if (map.getLevel() > 5) customOverlay.setMap(null); };
+                            overlayDiv.onmouseout = function() { marker.setZIndex(1); customOverlay.setZIndex(1); customOverlay.setMap(null); };
                             kakao.maps.event.addListener(marker, 'mouseover', function() { marker.setZIndex(999); customOverlay.setZIndex(999); customOverlay.setMap(map); });
-                            kakao.maps.event.addListener(marker, 'mouseout', function() { marker.setZIndex(1); customOverlay.setZIndex(1); if (map.getLevel() > 5) customOverlay.setMap(null); });
+                            kakao.maps.event.addListener(marker, 'mouseout', function() { marker.setZIndex(1); customOverlay.setZIndex(1); customOverlay.setMap(null); });
                         }
 
                         // 이번 청크 마커를 클러스터러에 즉시 추가 (점진적 표시)
@@ -743,24 +743,8 @@
         }
 
         function updateOverlaysVisibility() {
-            let level = map.getLevel();
-            let activeBtn = document.querySelector('.filter-btn.active');
-            let activeRisk = 'all';
-
-            if(activeBtn) {
-                if(activeBtn.innerText.includes("적정")) activeRisk = 0;
-                else if(activeBtn.innerText.includes("주의")) activeRisk = 1;
-                else if(activeBtn.innerText.includes("위험")) activeRisk = 2;
-            }
-
-            // 뷰포트 필터링: 현재 화면 범위 내 오버레이만 DOM 조작
-            const bounds = map.getBounds();
-            allOverlays.forEach(ov => {
-                const inView = bounds.contain(ov.getPosition());
-                const riskMatch = activeRisk === 'all' || ov.risk === activeRisk;
-                if (level <= 5 && inView && riskMatch) ov.setMap(map);
-                else ov.setMap(null);
-            });
+            // 호버 전용 모드: 이름표는 항상 숨김 — mouseover 시 개별 1개만 표시
+            allOverlays.forEach(ov => ov.setMap(null));
         }
 
         function filterMarkers(riskLevel, btnElement) {
