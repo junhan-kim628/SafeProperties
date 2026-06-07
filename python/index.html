@@ -1012,6 +1012,12 @@
             document.getElementById('loading').style.display = 'none';
             document.getElementById('report-content').style.display = 'block';
 
+            // 패널 헤더 색상을 AI 예측 결과로 확정
+            // (openPanel에서 house.risk 기준으로 먼저 설정했지만 AI 결과로 override)
+            const predIdx = { "적정": 0, "주의": 1, "위험": 2 };
+            document.getElementById('panel-header').style.background =
+                HEADER_BG[predIdx[data.prediction] ?? 0];
+
             const badge = document.getElementById('risk-badge');
             badge.innerText = `AI 판별: ${data.prediction}`;
             badge.className = 'risk-badge';
