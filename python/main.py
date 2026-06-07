@@ -264,11 +264,14 @@ def search_buildings(keyword: str = ""):
         conn = psycopg2.connect(**DB_PARAMS)
         cursor = conn.cursor()
 
-        # 건물명이나 주소에 '검색어'가 포함된 집을 최대 10개만 빠르게 조회
+        # 건물명·주소 검색 + house_analysis_data JOIN으로 위험도(risk_label) 함께 반환
         query = """
-            SELECT house_id, building_name, jibun_address, ST_X(geom) as lon, ST_Y(geom) as lat
-            FROM houses
-            WHERE building_name LIKE %s OR jibun_address LIKE %s
+            SELECT h.house_id, h.building_name, h.jibun_address,
+                   ST_X(h.geom) as lon, ST_Y(h.geom) as lat,
+                   a.risk_label
+            FROM houses h
+            LEFT JOIN house_analysis_data a ON h.house_id = a.house_id
+            WHERE h.building_name LIKE %s OR h.jibun_address LIKE %s
             LIMIT 10;
         """
         search_term = f"%{keyword}%"
@@ -282,7 +285,8 @@ def search_buildings(keyword: str = ""):
                 "building_name": r[1] if r[1] else "이름 없는 주택",
                 "address": r[2],
                 "lon": r[3],
-                "lat": r[4]
+                "lat": r[4],
+                "risk": int(r[5]) if r[5] is not None else None,  # None = 분석 데이터 없음
             })
 
         return {"status": "success", "data": results}
