@@ -59,6 +59,14 @@
         .risk-1 { background-color: #f39c12; }
         .risk-2 { background-color: #e74c3c; }
 
+        /* HUG 전세보증보험 가입 가능 여부 */
+        #hug-box { margin-bottom: 16px; border-radius: 10px; padding: 11px 14px; font-size: 13px; line-height: 1.55; }
+        #hug-box.hug-ok   { background:#eafaf1; border-left:4px solid #27ae60; color:#1e8449; }
+        #hug-box.hug-warn { background:#fef9e7; border-left:4px solid #f39c12; color:#d68910; }
+        #hug-box.hug-no   { background:#fdedec; border-left:4px solid #e74c3c; color:#c0392b; }
+        #hug-box .hug-title { font-weight:700; font-size:13.5px; margin-bottom:4px; }
+        #hug-box .hug-note  { font-size:11px; color:#888; margin-top:5px; }
+
         #ai-reason-box { margin-bottom: 20px; padding: 12px 15px; border-radius: 8px; display: none; }
         #ai-reason-text { margin: 5px 0 0 0; font-size: 13.5px; line-height: 1.5; font-weight: bold; }
 
@@ -248,6 +256,13 @@
             </div>
             <div id="report-content" style="display: none;">
                 <div style="text-align: center;"><div id="risk-badge" class="risk-badge">위험도 판별 결과</div></div>
+
+                <!-- HUG 전세보증보험 가입 가능 여부 -->
+                <div id="hug-box" style="display:none;">
+                    <div class="hug-title" id="hug-title"></div>
+                    <div id="hug-desc"></div>
+                    <div class="hug-note">※ 공시가격·KB시세 미보유로 실거래가 기준 추정치입니다.<br>정확한 가입 가능 여부는 <a href="https://www.khug.or.kr" target="_blank" style="color:inherit;">HUG 안심전세앱</a>에서 확인하세요.</div>
+                </div>
 
                 <div id="ai-reason-box">
                     <strong id="ai-reason-title" style="font-size: 13px;">💡 AI 감지 사유</strong>
@@ -832,6 +847,53 @@
             }
             document.getElementById('feat-floor').innerText = f.floor ? `${Math.round(f.floor)}층` : "-";
             document.getElementById('feat-tx').innerText = f.total_tx_count ? `${f.total_tx_count.toLocaleString()}건` : "-";
+
+            // ── HUG 전세보증보험 가입 가능 여부 ──────────────────────────
+            // 공시가격·KB시세 미보유 → 실거래가(avg_sale_price) 기준 추정
+            // 건물 유형별 공시가격/시세 비율 차이를 반영한 보수적 임계값 적용
+            //   아파트(0):    KB시세 ≈ 실거래가  → 90% 기준 직접 적용
+            //   연립다세대(1): 공시 ≈ 시세×65%  → 공시×140%×90% = 시세×81.9%  → 임계 80%
+            //   오피스텔(2):  공시 ≈ 시세×65%  → 동일                          → 임계 80%
+            //   단독다가구(3): 공시 ≈ 시세×70%  → 공시×140%×90% = 시세×88.2%  → 임계 85%
+            (function() {
+                const hugBox   = document.getElementById('hug-box');
+                const hugTitle = document.getElementById('hug-title');
+                const hugDesc  = document.getElementById('hug-desc');
+
+                if (!f.avg_sale_price || !f.avg_jeonse_deposit) {
+                    hugBox.style.display = 'none';
+                    return;
+                }
+
+                const jeonseRate = (f.avg_jeonse_deposit / f.avg_sale_price) * 100;
+                const typeNames  = ['아파트', '연립다세대', '오피스텔', '단독다가구'];
+                const thresholds = [90, 80, 80, 85];   // 건물 유형별 임계 전세가율(%)
+                const typeCode   = f.building_type_code ?? 0;
+                const typeName   = typeNames[typeCode] ?? '주택';
+                const threshold  = thresholds[typeCode] ?? 90;
+                const rateStr    = jeonseRate.toFixed(1);
+
+                hugBox.className = '';  // 클래스 초기화
+
+                if (jeonseRate <= threshold - 5) {
+                    // 여유 있게 가입 가능
+                    hugBox.classList.add('hug-ok');
+                    hugTitle.textContent = `✅ HUG 전세보증보험 가입 가능 (추정)`;
+                    hugDesc.textContent  = `전세가율 ${rateStr}% — ${typeName} 기준 ${threshold}% 이하로 가입 요건 충족 가능성이 높습니다.`;
+                } else if (jeonseRate <= threshold) {
+                    // 경계선 근처 — 주의
+                    hugBox.classList.add('hug-warn');
+                    hugTitle.textContent = `⚠️ HUG 전세보증보험 가입 불확실 (추정)`;
+                    hugDesc.textContent  = `전세가율 ${rateStr}% — ${typeName} 기준 ${threshold}% 한도에 근접해 선순위채권·공시가격에 따라 거절될 수 있습니다.`;
+                } else {
+                    // 한도 초과 — 가입 불가
+                    hugBox.classList.add('hug-no');
+                    hugTitle.textContent = `🚨 HUG 전세보증보험 가입 불가 (추정)`;
+                    hugDesc.textContent  = `전세가율 ${rateStr}% — ${typeName} 기준 ${threshold}%를 초과해 HUG 보증보험 가입이 어렵습니다. SGI(서울보증보험)는 가입 가능할 수 있습니다.`;
+                }
+                hugBox.style.display = 'block';
+            })();
+            // ──────────────────────────────────────────────────────────────
 
             // 경매 손실 시뮬레이터 초기화
             simSalePrice = f.avg_sale_price || 0;
